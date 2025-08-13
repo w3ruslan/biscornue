@@ -20,7 +20,6 @@ jobs:
         uses: actions/checkout@v4
 
       # 2. Adım: Android derlemesi için Java JDK 17'yi kurar.
-      # HATA DÜZELTMESİ: 'cache: "gradle"' satırı buradan kaldırıldı.
       - name: Java Kurulumu (JDK 17)
         uses: actions/setup-java@v4
         with:
@@ -66,13 +65,20 @@ jobs:
             echo "flutter pub get tekrar deneniyor ($i/5)..."
             sleep 10
           done
+      
+      # YENİ ADIM: Koddaki uyumsuz import satırını otomatik düzeltir.
+      - name: Uyumsuz Import Satirini Duzelt
+        run: |
+          sed -i 's|package:esc_pos_printer/esc_pos_printer.dart|package:esc_pos_printer_plus/esc_pos_printer_plus.dart|g' lib/main.dart
+          echo "---- main.dart dosyasindaki importlar duzeltildi ----"
+          grep "import 'package:" lib/main.dart
 
-      # 7. Adım: Sadece 64-bit ARM mimarisi için APK oluşturur.
+      # 8. Adım: Sadece 64-bit ARM mimarisi için APK oluşturur.
       - name: APK Olustur (arm64 release)
         run: |
           flutter build apk --release --split-per-abi --target-platform=android-arm64
 
-      # 8. Adım: Oluşturulan APK dosyasını "artifact" olarak kaydeder.
+      # 9. Adım: Oluşturulan APK dosyasını "artifact" olarak kaydeder.
       - name: APK Dosyasini Yukle
         uses: actions/upload-artifact@v4
         with:
