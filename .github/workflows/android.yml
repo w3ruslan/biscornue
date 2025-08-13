@@ -33,44 +33,42 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           # settings.gradle dosyasını baştan yaz
           cat > android/settings.gradle <<'EOF'
-pluginManagement {
-  repositories {
-    google()
-    mavenCentral()
-    gradlePluginPortal()
-  }
-}
-dependencyResolutionManagement {
-  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-  repositories {
-    google()
-    mavenCentral()
-  }
-}
-rootProject.name = "surplace_pos"
-include(":app")
-EOF
-
+          pluginManagement {
+            repositories {
+              google()
+              mavenCentral()
+              gradlePluginPortal()
+            }
+          }
+          dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+              google()
+              mavenCentral()
+            }
+          }
+          rootProject.name = "surplace_pos"
+          include(":app")
+          EOF
           # android/build.gradle içine (yoksa) allprojects + repositories + resolutionStrategy ekle
           if ! grep -q "allprojects[[:space:]]*{" android/build.gradle; then
             cat >> android/build.gradle <<'EOF'
-allprojects {
-  repositories {
-    google()
-    mavenCentral()
-  }
-  configurations.all {
-    resolutionStrategy {
-      // Kotlin tek sürüm zorla (duplicate class hatasını önler)
-      force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
-      force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'
-    }
-  }
-}
-EOF
+          allprojects {
+            repositories {
+              google()
+              mavenCentral()
+            }
+            configurations.all {
+              resolutionStrategy {
+                // Kotlin tek sürüm zorla (duplicate class hatasını önler)
+                force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
+                force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'
+              }
+            }
+          }
+          EOF
           fi
 
       - name: AndroidManifest’e INTERNET izni ekle
@@ -79,7 +77,7 @@ EOF
           set -euo pipefail
           MANIFEST=android/app/src/main/AndroidManifest.xml
           sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET" />\
-    <application#' "$MANIFEST"
+              <application#' "$MANIFEST"
 
       - name: Bağımlılıkları indir
         run: flutter pub get
