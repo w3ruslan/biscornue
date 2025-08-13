@@ -1,40 +1,35 @@
-# İş akışının adı: GitHub "Actions" sekmesinde bu isimle görünecek.
 name: Android APK Olustur (arm64 Release)
 
-# İş akışının tetiklenme koşulları:
 on:
-  # Manuel olarak "Run workflow" butonuyla tetiklenebilir.
   workflow_dispatch:
-  # 'main' branch'ine her kod gönderildiğinde (push) otomatik olarak çalışır.
   push:
     branches: [ main ]
 
 jobs:
   build:
-    # Derlemenin yapılacağı sanal makine.
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Adım: Proje kodlarını sanal makineye indirir.
       - name: Proje Dosyalarini Indir
         uses: actions/checkout@v4
 
-      # 2. Adım: Android derlemesi için Java JDK 17'yi kurar.
       - name: Java Kurulumu (JDK 17)
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "temurin"
 
-      # 3. Adım: Flutter SDK'sını kurar (versiyon 3.22.0).
       - name: Flutter Kurulumu (stable)
         uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.22.0"
           channel: "stable"
           cache: true
+      
+      # ÖNEMLİ ADIM: Proje önbelleğini temizler. Bu, eski paket hatalarını çözer.
+      - name: Projeyi Temizle
+        run: flutter clean
 
-      # 4. Adım: 'android' klasörünün varlığını kontrol eder, yoksa oluşturur.
       - name: Android Platformunun Varligini Kontrol Et
         shell: bash
         run: |
@@ -45,7 +40,6 @@ jobs:
             echo "android/ klasoru zaten mevcut."
           fi
 
-      # 5. Adım: İnternet iznini AndroidManifest.xml dosyasına ekler.
       - name: INTERNET Iznini Ekle
         shell: bash
         run: |
@@ -53,32 +47,13 @@ jobs:
           if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
             sed -i '0,/<application/ s//<uses-permission android:name="android.permission.INTERNET" \/>\n    <application/' "$MANIFEST"
           fi
-          echo "---- AndroidManifest.xml Icerigi ----"
-          cat $MANIFEST
 
-      # 6. Adım: Proje bağımlılıklarını yükler (5 kez deneme ile).
       - name: Bagimliliklari Yukle (flutter pub get)
-        shell: bash
-        run: |
-          for i in {1..5}; do
-            flutter pub get && break
-            echo "flutter pub get tekrar deneniyor ($i/5)..."
-            sleep 10
-          done
-      
-      # YENİ ADIM: Koddaki uyumsuz import satırını otomatik düzeltir.
-      - name: Uyumsuz Import Satirini Duzelt
-        run: |
-          sed -i 's|package:esc_pos_printer/esc_pos_printer.dart|package:esc_pos_printer_plus/esc_pos_printer_plus.dart|g' lib/main.dart
-          echo "---- main.dart dosyasindaki importlar duzeltildi ----"
-          grep "import 'package:" lib/main.dart
+        run: flutter pub get
 
-      # 8. Adım: Sadece 64-bit ARM mimarisi için APK oluşturur.
       - name: APK Olustur (arm64 release)
-        run: |
-          flutter build apk --release --split-per-abi --target-platform=android-arm64
+        run: flutter build apk --release --split-per-abi --target-platform=android-arm64
 
-      # 9. Adım: Oluşturulan APK dosyasını "artifact" olarak kaydeder.
       - name: APK Dosyasini Yukle
         uses: actions/upload-artifact@v4
         with:
