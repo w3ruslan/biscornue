@@ -27,39 +27,45 @@ jobs:
       - name: Android Projesini Olustur
         run: flutter create . --platforms=android --org com.w3ruslan --project-name surplace_pos --overwrite
 
+      # --- HERE-DOC YOK, printf ile yaziyoruz ---
       - name: Gradle Adreslerini Garanti Altina Al (settings.gradle + build.gradle)
         shell: bash
         run: |
           set -euo pipefail
+
+          mkdir -p android
+
           # settings.gradle: pluginManagement + dependencyResolutionManagement
-          cat > android/settings.gradle <<'EOF'
-pluginManagement {
-  repositories {
-    google()
-    mavenCentral()
-    gradlePluginPortal()
-  }
-}
-dependencyResolutionManagement {
-  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-  repositories {
-    google()
-    mavenCentral()
-  }
-}
-rootProject.name = "surplace_pos"
-include(":app")
-EOF
-          # project-level build.gradle: allprojects { repositories { ... } }
+          SETTINGS_FILE=android/settings.gradle
+          printf '%s\n' \
+'pluginManagement {' \
+'  repositories {' \
+'    google()' \
+'    mavenCentral()' \
+'    gradlePluginPortal()' \
+'  }' \
+'}' \
+'dependencyResolutionManagement {' \
+'  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)' \
+'  repositories {' \
+'    google()' \
+'    mavenCentral()' \
+'  }' \
+'}' \
+'rootProject.name = "surplace_pos"' \
+'include(":app")' \
+          > "$SETTINGS_FILE"
+
+          # project-level build.gradle: allprojects { repositories { ... } } yoksa ekle
           if ! grep -q "allprojects" android/build.gradle; then
-            cat >> android/build.gradle <<'EOF'
-allprojects {
-  repositories {
-    google()
-    mavenCentral()
-  }
-}
-EOF
+            printf '%s\n' \
+'allprojects {' \
+'  repositories {' \
+'    google()' \
+'    mavenCentral()' \
+'  }' \
+'}' \
+            >> android/build.gradle
           fi
 
       - name: Kotlin Surumunu Hizala ve Tek Surumu Zorla
@@ -67,22 +73,24 @@ EOF
         run: |
           set -euo pipefail
           FILE=android/build.gradle
+
           # Eski şablonlarda varsa ext.kotlin_version'ı 1.9.24'e çek
           if grep -q "ext.kotlin_version" "$FILE"; then
             sed -i "s/ext.kotlin_version *= *'.*'/ext.kotlin_version = '1.9.24'/" "$FILE"
           fi
-          # Bütün modüllerde aynı stdlib sürümünü zorla (duplicate class'ı engeller)
+
+          # resolutionStrategy yoksa ekle (tek stdlib sürümü)
           if ! grep -q "resolutionStrategy" "$FILE"; then
-            cat >> android/build.gradle <<'EOF'
-allprojects {
-  configurations.all {
-    resolutionStrategy {
-      force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
-      force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'
-    }
-  }
-}
-EOF
+            printf '%s\n' \
+'allprojects {' \
+'  configurations.all {' \
+'    resolutionStrategy {' \
+"      force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'" \
+"      force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'" \
+'    }' \
+'  }' \
+'}' \
+            >> "$FILE"
           fi
 
       - name: INTERNET Iznini Ekle
@@ -90,7 +98,8 @@ EOF
         run: |
           set -euo pipefail
           MANIFEST=android/app/src/main/AndroidManifest.xml
-          sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET" />\    <application#' "$MANIFEST"
+          sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET" />\
+    <application#' "$MANIFEST"
 
       - name: Bagimliliklari Yukle
         run: flutter pub get
