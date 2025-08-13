@@ -10,7 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # UYUMLU YAZICI PAKETİ EKLENDİ
+  # DOĞRU VE UYUMLU YAZICI PAKETİ
   esc_pos_printer_plus: ^0.0.3
 
   network_info_plus: ^5.0.3 
