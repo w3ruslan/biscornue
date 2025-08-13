@@ -1,46 +1,28 @@
-import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:network_info_plus/network_info_plus.dart';
+
+// Yazıcı
 import 'package:esc_pos_printer/esc_pos_printer.dart';
-import 'package:esc_pos_utils_plus/esc_pos_utils.dart' as esc;
+import 'package:esc_pos_utils/esc_pos_utils.dart';
 
-/* =======================
-   Sabitler
-   ======================= */
+/// =======================
+///  AYARLAR
+/// =======================
 const String _ADMIN_PIN = '6538';
-const String _kSavedPrinterIp = 'printer_ip';
-const int _kDefaultPosPort = 9100;
+const String _prefsPrinterIp = 'printer_ip';
+const String _defaultPrinterIp = '192.168.1.1';
 
-/* =======================
-   ENTRY
-   ======================= */
-void main() {
-  final appState = AppState();
-  runApp(AppScope(notifier: appState, child: const App()));
-}
-
-class App extends StatelessWidget {
-  const App({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Commande Sur Place',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true),
-      home: const Home(),
-    );
-  }
-}
-
-/* =======================
-   MODELLER & STATE
-   ======================= */
+/// =======================
+///  MODELLER
+/// =======================
 class Product {
   String name;
   final List<OptionGroup> groups;
   Product({required this.name, List<OptionGroup>? groups})
       : groups = groups ?? [];
+
   double priceForSelection(Map<String, List<OptionItem>> picked) {
     double total = 0;
     for (final g in groups) {
@@ -54,7 +36,7 @@ class Product {
 class OptionGroup {
   final String id;
   String title;
-  bool multiple; // false=tek, true=çoklu
+  bool multiple; // false = tek seçim, true = çoklu
   int minSelect;
   int maxSelect;
   final List<OptionItem> items;
@@ -86,7 +68,7 @@ class SavedOrder {
   final String id;
   final DateTime createdAt;
   final List<CartLine> lines;
-  final String customer; // müşteri adı
+  final String customer;
   SavedOrder({
     required this.id,
     required this.createdAt,
@@ -96,88 +78,60 @@ class SavedOrder {
   double get total => lines.fold(0.0, (s, l) => s + l.total);
 }
 
+/// =======================
+///  STATE
+/// =======================
 class AppState extends ChangeNotifier {
   final List<Product> products = [];
   final List<CartLine> cart = [];
   final List<SavedOrder> orders = [];
 
-  void addProduct(Product p) { products.add(p); notifyListeners(); }
-  void replaceProductAt(int i, Product p) { products[i] = p; notifyListeners(); }
-
-  void addLineToCart(Product p, Map<String, List<OptionItem>> picked) {
-    final deep = { for (final e in picked.entries) e.key: List<OptionItem>.from(e.value) };
-    cart.add(CartLine(product: p, picked: deep));
+  String _printerIp = _defaultPrinterIp;
+  String get printerIp => _printerIp;
+  set printerIp(String ip) {
+    _printerIp = ip.trim().isEmpty ? _defaultPrinterIp : ip.trim();
+    _savePrinterIp();
     notifyListeners();
   }
-  void removeCartLineAt(int i) { if (i>=0 && i<cart.length) { cart.removeAt(i); notifyListeners(); } }
-  void clearCart() { cart.clear(); notifyListeners(); }
 
-  void finalizeCartToOrder({required String customer}) {
-    if (cart.isEmpty) return;
-    final deepLines = cart.map((l) => CartLine(
-      product: l.product,
-      picked: { for (final e in l.picked.entries) e.key: List<OptionItem>.from(e.value) },
-    )).toList();
-    orders.add(SavedOrder(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      createdAt: DateTime.now(),
-      lines: deepLines,
-      customer: customer,
-    ));
-    cart.clear();
-    notifyListeners();
-  }
-  void clearOrders() { orders.clear(); notifyListeners(); }
-}
+  Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    _printerIp = prefs.getString(_prefsPrinterIp) ?? _defaultPrinterIp;
 
-/* InheritedNotifier: global state erişimi */
-class AppScope extends InheritedNotifier<AppState> {
-  const AppScope({required AppState notifier, required Widget child, Key? key})
-      : super(key: key, notifier: notifier, child: child);
-  static AppState of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<AppScope>();
-    assert(scope != null, 'AppScope bulunamadı.');
-    return scope!.notifier!;
-  }
-}
-
-/* =======================
-   HOME (4 sekme)
-   ======================= */
-class Home extends StatefulWidget {
-  const Home({super.key});
-  @override
-  State<Home> createState() => _HomeState();
-}
-
-class _HomeState extends State<Home> {
-  bool _seeded = false;
-  int index = 0;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_seeded) return;
-    _seeded = true;
-
-    final app = AppScope.of(context);
-    if (app.products.isEmpty) {
+    // İlk kez açılışta örnek ürün
+    if (products.isEmpty) {
       final sandwich = Product(name: 'Sandwich');
       sandwich.groups.addAll([
         OptionGroup(
-          id: 'pain', title: 'Pain', multiple: false, minSelect: 1, maxSelect: 1,
-          items: [ OptionItem(id: 'galette', label: 'Galette', price: 0),
-                   OptionItem(id: 'pita', label: 'Pain pita', price: 0), ],
+          id: 'bread',
+          title: 'Pain',
+          multiple: false,
+          minSelect: 1,
+          maxSelect: 1,
+          items: [
+            OptionItem(id: 'galette', label: 'Galette', price: 0),
+            OptionItem(id: 'pita', label: 'Pain pita', price: 0),
+          ],
         ),
         OptionGroup(
-          id: 'viande', title: 'Viande', multiple: false, minSelect: 1, maxSelect: 1,
-          items: [ OptionItem(id: 'kebab', label: 'Kebab', price: 0),
-                   OptionItem(id: 'steak', label: 'Steak', price: 0),
-                   OptionItem(id: 'poulet', label: 'Poulet', price: 0),
-                   OptionItem(id: 'legumes', label: 'Légumes grillés', price: 0), ],
+          id: 'meat',
+          title: 'Viande',
+          multiple: false,
+          minSelect: 1,
+          maxSelect: 1,
+          items: [
+            OptionItem(id: 'kebab', label: 'Kebab', price: 0),
+            OptionItem(id: 'steak', label: 'Steak', price: 0),
+            OptionItem(id: 'poulet', label: 'Poulet', price: 0),
+            OptionItem(id: 'legumes', label: 'Légumes grillés', price: 0),
+          ],
         ),
         OptionGroup(
-          id: 'supp', title: 'Suppléments (max 3)', multiple: true, minSelect: 0, maxSelect: 3,
+          id: 'supp',
+          title: 'Suppléments (max 3)',
+          multiple: true,
+          minSelect: 0,
+          maxSelect: 3,
           items: [
             OptionItem(id: 'oeuf', label: 'Œuf', price: 1.00),
             OptionItem(id: 'cheddar', label: 'Cheddar', price: 1.00),
@@ -189,7 +143,11 @@ class _HomeState extends State<Home> {
           ],
         ),
         OptionGroup(
-          id: 'sauces', title: 'Sauces (max 2)', multiple: true, minSelect: 0, maxSelect: 2,
+          id: 'sauces',
+          title: 'Sauces (max 2)',
+          multiple: true,
+          minSelect: 0,
+          maxSelect: 2,
           items: [
             OptionItem(id: 'algerienne', label: 'Algérienne', price: 0),
             OptionItem(id: 'blanche', label: 'Blanche', price: 0),
@@ -201,19 +159,213 @@ class _HomeState extends State<Home> {
           ],
         ),
         OptionGroup(
-          id: 'accompagnement', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1,
-          items: [ OptionItem(id: 'frites', label: 'Avec frites', price: 2.50),
-                   OptionItem(id: 'sans_frites', label: 'Sans frites', price: 0), ],
+          id: 'side',
+          title: 'Accompagnement',
+          multiple: false,
+          minSelect: 1,
+          maxSelect: 1,
+          items: [
+            OptionItem(id: 'frites', label: 'Avec frites', price: 2.50),
+            OptionItem(id: 'sans_frites', label: 'Sans frites', price: 0),
+          ],
         ),
         OptionGroup(
-          id: 'boisson', title: 'Boisson', multiple: false, minSelect: 1, maxSelect: 1,
-          items: [ OptionItem(id: 'avec_boisson', label: 'Avec boisson', price: 2.00),
-                   OptionItem(id: 'sans_boisson', label: 'Sans boisson', price: 0), ],
+          id: 'boisson',
+          title: 'Boisson',
+          multiple: false,
+          minSelect: 1,
+          maxSelect: 1,
+          items: [
+            OptionItem(id: 'avec_boisson', label: 'Avec boisson', price: 2.00),
+            OptionItem(id: 'sans_boisson', label: 'Sans boisson', price: 0),
+          ],
         ),
       ]);
-      app.addProduct(sandwich);
+      products.add(sandwich);
     }
   }
+
+  Future<void> _savePrinterIp() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsPrinterIp, _printerIp);
+  }
+
+  void addProduct(Product p) {
+    products.add(p);
+    notifyListeners();
+  }
+
+  void replaceProductAt(int i, Product p) {
+    products[i] = p;
+    notifyListeners();
+  }
+
+  void addLineToCart(Product p, Map<String, List<OptionItem>> picked) {
+    final deep = {
+      for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
+    };
+    cart.add(CartLine(product: p, picked: deep));
+    notifyListeners();
+  }
+
+  void removeCartLineAt(int i) {
+    if (i >= 0 && i < cart.length) {
+      cart.removeAt(i);
+      notifyListeners();
+    }
+  }
+
+  void clearCart() {
+    cart.clear();
+    notifyListeners();
+  }
+
+  void finalizeCartToOrder({required String customer}) {
+    if (cart.isEmpty) return;
+    final deepLines = cart
+        .map((l) => CartLine(
+              product: l.product,
+              picked: {
+                for (final e in l.picked.entries)
+                  e.key: List<OptionItem>.from(e.value)
+              },
+            ))
+        .toList();
+    orders.add(SavedOrder(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      createdAt: DateTime.now(),
+      lines: deepLines,
+      customer: customer,
+    ));
+    cart.clear();
+    notifyListeners();
+  }
+
+  void clearOrders() {
+    orders.clear();
+    notifyListeners();
+  }
+
+  /// ========== YAZDIRMA ==========
+  Future<PosPrintResult> printOrder(SavedOrder o) async {
+    final profile = await CapabilityProfile.load();
+    final printer = NetworkPrinter(PaperSize.mm80, profile);
+
+    final res = await printer.connect(_printerIp, port: 9100);
+    if (res != PosPrintResult.success) {
+      return res;
+    }
+
+    final df = DateFormat('dd/MM HH:mm');
+
+    // Başlık
+    printer.text('Commande Sur Place',
+        styles: const PosStyles(
+            bold: true, width: PosTextSize.size2, height: PosTextSize.size2),
+        linesAfter: 1);
+    if (o.customer.isNotEmpty) {
+      printer.text('Client: ${o.customer}',
+          styles: const PosStyles(bold: true));
+    }
+    printer.text('Heure: ${df.format(o.createdAt)}');
+    printer.hr();
+
+    for (int i = 0; i < o.lines.length; i++) {
+      final l = o.lines[i];
+      printer.text('Article ${i + 1}: ${l.product.name}',
+          styles: const PosStyles(bold: true));
+      for (final g in l.product.groups) {
+        final list = l.picked[g.id] ?? const <OptionItem>[];
+        if (list.isEmpty) continue;
+        printer.text(' ${g.title}', styles: const PosStyles(underline: true));
+        for (final it in list) {
+          final pr =
+              it.price == 0 ? '€0.00' : '€${it.price.toStringAsFixed(2)}';
+          printer.row([
+            PosColumn(text: '• ${it.label}', width: 9),
+            PosColumn(
+                text: pr,
+                width: 3,
+                styles: const PosStyles(align: PosAlign.right)),
+          ]);
+        }
+      }
+      printer.row([
+        const PosColumn(text: 'Sous-total', width: 9),
+        PosColumn(
+            text: '€${l.total.toStringAsFixed(2)}',
+            width: 3,
+            styles: const PosStyles(align: PosAlign.right, bold: true)),
+      ]);
+      printer.hr();
+    }
+
+    printer.row([
+      const PosColumn(
+          text: 'TOTAL',
+          width: 6,
+          styles: PosStyles(bold: true, height: PosTextSize.size2)),
+      PosColumn(
+          text: '€${o.total.toStringAsFixed(2)}',
+          width: 6,
+          styles: const PosStyles(
+              align: PosAlign.right,
+              bold: true,
+              height: PosTextSize.size2)),
+    ]);
+    printer.feed(2);
+    printer.cut();
+    printer.disconnect();
+    return PosPrintResult.success;
+  }
+}
+
+/// InheritedNotifier: global state erişimi
+class AppScope extends InheritedNotifier<AppState> {
+  const AppScope({required AppState notifier, required Widget child, Key? key})
+      : super(key: key, notifier: notifier, child: child);
+
+  static AppState of(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<AppScope>();
+    assert(scope != null, 'AppScope bulunamadı.');
+    return scope!.notifier!;
+  }
+}
+
+/// =======================
+///  ENTRY
+/// =======================
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final appState = AppState();
+  await appState.init();
+  runApp(AppScope(notifier: appState, child: const App()));
+}
+
+class App extends StatelessWidget {
+  const App({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Commande Sur Place',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(useMaterial3: true),
+      home: const Home(),
+    );
+  }
+}
+
+/// =======================
+///  HOME (4 sekme)
+/// =======================
+class Home extends StatefulWidget {
+  const Home({super.key});
+  @override
+  State<Home> createState() => _HomeState();
+}
+
+class _HomeState extends State<Home> {
+  int index = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -229,13 +381,24 @@ class _HomeState extends State<Home> {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Commande Sur Place')),
+      appBar: AppBar(
+        title: const Text('Commande Sur Place'),
+        actions: [
+          IconButton(
+            tooltip: 'Yazıcı IP',
+            onPressed: () => _askPrinterIp(context),
+            icon: const Icon(Icons.print_outlined),
+          ),
+        ],
+      ),
       body: pages[index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         destinations: [
-          const NavigationDestination(icon: Icon(Icons.grid_view_rounded), label: 'Produits'),
-          const NavigationDestination(icon: Icon(Icons.add_box_outlined), label: 'Créer'),
+          const NavigationDestination(
+              icon: Icon(Icons.grid_view_rounded), label: 'Produits'),
+          const NavigationDestination(
+              icon: Icon(Icons.add_box_outlined), label: 'Créer'),
           NavigationDestination(
             icon: Stack(
               clipBehavior: Clip.none,
@@ -243,21 +406,29 @@ class _HomeState extends State<Home> {
                 const Icon(Icons.shopping_bag_outlined),
                 if (cartBadge > 0)
                   Positioned(
-                    right: -6, top: -6,
+                    right: -6,
+                    top: -6,
                     child: Container(
                       padding: const EdgeInsets.all(3),
-                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.red),
-                      child: Text('$cartBadge', style: const TextStyle(fontSize: 10, color: Colors.white)),
+                      decoration: const BoxDecoration(
+                          shape: BoxShape.circle, color: Colors.red),
+                      child: Text('$cartBadge',
+                          style: const TextStyle(
+                              fontSize: 10, color: Colors.white)),
                     ),
                   ),
               ],
             ),
             label: 'Panier (€${totalCart.toStringAsFixed(2)})',
           ),
-          const NavigationDestination(icon: Icon(Icons.receipt_long), label: 'Commandes'),
+          const NavigationDestination(
+              icon: Icon(Icons.receipt_long), label: 'Commandes'),
         ],
         onDestinationSelected: (i) async {
-          if (i == 1) { final ok = await _askPin(context); if (!ok) return; }
+          if (i == 1) {
+            final ok = await _askPin(context);
+            if (!ok) return;
+          }
           setState(() => index = i);
         },
       ),
@@ -265,9 +436,9 @@ class _HomeState extends State<Home> {
   }
 }
 
-/* =======================
-   PAGE 1 : PRODUITS
-   ======================= */
+/// =======================
+///  PAGE 1: ÜRÜNLER
+/// =======================
 class ProductsPage extends StatelessWidget {
   const ProductsPage({super.key});
 
@@ -287,12 +458,17 @@ class ProductsPage extends StatelessWidget {
     }
 
     final width = MediaQuery.of(context).size.width;
-    int cross = 2; if (width > 600) cross = 3; if (width > 900) cross = 4;
+    int cross = 2;
+    if (width > 600) cross = 3;
+    if (width > 900) cross = 4;
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: cross, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 1,
+        crossAxisCount: cross,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: 1,
       ),
       itemCount: products.length,
       itemBuilder: (_, i) => _ProductCard(product: products[i]),
@@ -310,10 +486,12 @@ class _ProductCard extends StatelessWidget {
 
     Future<void> openWizard() async {
       final added = await Navigator.push<bool>(
-        context, MaterialPageRoute(builder: (_) => OrderWizard(product: product)),
+        context,
+        MaterialPageRoute(builder: (_) => OrderWizard(product: product)),
       );
       if (added == true && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ajouté au panier.')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Ajouté au panier.')));
       }
     }
 
@@ -321,53 +499,45 @@ class _ProductCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(24),
       onTap: openWizard,
       child: Ink(
-        decoration: BoxDecoration(color: color.surfaceVariant, borderRadius: BorderRadius.circular(24)),
+        decoration: BoxDecoration(
+            color: color.surfaceVariant,
+            borderRadius: BorderRadius.circular(24)),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Container(
-              height: 56, width: 56,
-              decoration: BoxDecoration(color: color.primary.withOpacity(0.15), borderRadius: BorderRadius.circular(16)),
+              height: 56,
+              width: 56,
+              decoration: BoxDecoration(
+                color: color.primary.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Icon(Icons.fastfood_rounded, color: color.primary, size: 32),
             ),
             const SizedBox(height: 16),
-            Text(product.name, textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            Text(product.name,
+                textAlign: TextAlign.center,
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            Text('${product.groups.length} groupe(s)', style: TextStyle(color: color.onSurfaceVariant)),
+            Text('${product.groups.length} groupe(s)',
+                style: TextStyle(color: color.onSurfaceVariant)),
             const Spacer(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                choisirButton(() => openWizard(), context),
-                IconButton(
-                  tooltip: 'Modifier',
-                  onPressed: () async {
-                    final ok = await _askPin(context);
-                    if (!ok) return;
-                    Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => CreateProductPage(
-                        onGoToTab: (_) {},
-                        editIndex: _findProductIndex(context, product),
-                      ),
-                    ));
-                  },
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-              ],
+            FilledButton.icon(
+              onPressed: openWizard,
+              icon: const Icon(Icons.shopping_cart_outlined, size: 20),
+              label: const Text('Choisir'),
             ),
           ]),
         ),
       ),
     );
   }
-
-  int _findProductIndex(BuildContext context, Product p) => AppScope.of(context).products.indexOf(p);
 }
 
-/* =======================
-   PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
-   ======================= */
+/// =======================
+///  PAGE 2: OLUŞTUR/DÜZENLE
+/// =======================
 class CreateProductPage extends StatefulWidget {
   final void Function(int) onGoToTab;
   final int? editIndex;
@@ -395,40 +565,76 @@ class _CreateProductPageState extends State<CreateProductPage> {
     if (idx < 0 || idx >= app.products.length) return;
     final p = app.products[idx];
     nameCtrl.text = p.name;
-    editingGroups..clear()..addAll(p.groups.map(_copyGroup));
+    editingGroups
+      ..clear()
+      ..addAll(p.groups.map(_copyGroup));
     setState(() => editingIndex = idx);
   }
 
   OptionGroup _copyGroup(OptionGroup g) => OptionGroup(
-    id: g.id, title: g.title, multiple: g.multiple, minSelect: g.minSelect, maxSelect: g.maxSelect,
-    items: g.items.map((e) => OptionItem(id: e.id, label: e.label, price: e.price)).toList(),
-  );
+        id: g.id,
+        title: g.title,
+        multiple: g.multiple,
+        minSelect: g.minSelect,
+        maxSelect: g.maxSelect,
+        items: g.items
+            .map((e) => OptionItem(id: e.id, label: e.label, price: e.price))
+            .toList(),
+      );
 
   void addGroup() {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
-    editingGroups.add(OptionGroup(id: id, title: 'Nouveau groupe', multiple: false, minSelect: 1, maxSelect: 1));
+    editingGroups.add(OptionGroup(
+        id: id,
+        title: 'Nouveau groupe',
+        multiple: false,
+        minSelect: 1,
+        maxSelect: 1));
     setState(() {});
   }
 
   void saveProduct() {
     final app = AppScope.of(context);
-    if (nameCtrl.text.trim().isEmpty) { _snack(context, 'Nom du produit requis.'); return; }
+    if (nameCtrl.text.trim().isEmpty) {
+      _snack(context, 'Nom du produit requis.');
+      return;
+    }
     for (final g in editingGroups) {
-      if (g.title.trim().isEmpty) { _snack(context, 'Titre du groupe manquant.'); return; }
-      if (g.items.isEmpty) { _snack(context, 'Ajoutez au moins une option dans "${g.title}".'); return; }
+      if (g.title.trim().isEmpty) {
+        _snack(context, 'Titre du groupe manquant.');
+        return;
+      }
+      if (g.items.isEmpty) {
+        _snack(context, 'Ajoutez au moins une option dans "${g.title}".');
+        return;
+      }
       if (g.minSelect < 0 || g.maxSelect < 1 || g.minSelect > g.maxSelect) {
-        _snack(context, 'Règles min/max invalides dans "${g.title}".'); return;
+        _snack(context, 'Règles min/max invalides dans "${g.title}".');
+        return;
       }
       if (!g.multiple && (g.minSelect != 1 || g.maxSelect != 1)) {
-        _snack(context, 'Choix unique doit avoir min=1 et max=1 (${g.title}).'); return;
+        _snack(context, 'Choix unique doit avoir min=1 et max=1 (${g.title}).');
+        return;
       }
     }
-    final p = Product(name: nameCtrl.text.trim(), groups: List.of(editingGroups));
-    if (editingIndex == null) { app.addProduct(p); _snack(context, 'Produit créé.'); }
-    else { app.replaceProductAt(editingIndex!, p); _snack(context, 'Produit mis à jour.'); }
-    nameCtrl.text = ''; editingGroups.clear(); setState(() => editingIndex = null);
+    final p =
+        Product(name: nameCtrl.text.trim(), groups: List.of(editingGroups));
+    if (editingIndex == null) {
+      app.addProduct(p);
+      _snack(context, 'Produit créé.');
+    } else {
+      app.replaceProductAt(editingIndex!, p);
+      _snack(context, 'Produit mis à jour.');
+    }
+    nameCtrl.text = '';
+    editingGroups.clear();
+    setState(() => editingIndex = null);
 
-    if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      widget.onGoToTab(0);
+    }
   }
 
   @override
@@ -438,28 +644,44 @@ class _CreateProductPageState extends State<CreateProductPage> {
       padding: const EdgeInsets.all(12),
       children: [
         Row(children: [
-          IconButton(icon: const Icon(Icons.arrow_back), onPressed: () {
-            if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
-          }, tooltip: 'Retour'),
+          IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () {
+                if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                } else {
+                  widget.onGoToTab(0);
+                }
+              }),
           const SizedBox(width: 8),
           Text(editingIndex == null ? 'Créer un produit' : 'Modifier un produit',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const Spacer(),
           TextButton.icon(
             onPressed: () {
-              nameCtrl.text = ''; editingGroups.clear(); setState(() => editingIndex = null);
-              if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
+              nameCtrl.text = '';
+              editingGroups.clear();
+              setState(() => editingIndex = null);
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              } else {
+                widget.onGoToTab(0);
+              }
             },
-            icon: const Icon(Icons.close), label: const Text('Annuler'),
+            icon: const Icon(Icons.close),
+            label: const Text('Annuler'),
           ),
         ]),
         const SizedBox(height: 12),
 
         if (app.products.isNotEmpty) ...[
-          const Text('Produits existants', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text('Produits existants',
+              style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           ListView.separated(
-            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: app.products.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (_, i) {
@@ -469,22 +691,33 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 title: Text(p.name),
                 subtitle: Text('${p.groups.length} groupe(s)'),
                 trailing: FilledButton.tonalIcon(
-                  icon: const Icon(Icons.edit), label: const Text('Modifier'),
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Modifier'),
                   onPressed: () => _loadForEdit(i),
                 ),
               );
             },
           ),
-          const SizedBox(height: 16), const Divider(), const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 12),
         ],
 
-        TextField(controller: nameCtrl,
-          decoration: const InputDecoration(labelText: 'Nom du produit', border: OutlineInputBorder())),
+        TextField(
+            controller: nameCtrl,
+            decoration: const InputDecoration(
+                labelText: 'Nom du produit', border: OutlineInputBorder())),
         const SizedBox(height: 12),
         Row(children: [
-          FilledButton.icon(onPressed: addGroup, icon: const Icon(Icons.add), label: const Text('Ajouter un groupe')),
+          FilledButton.icon(
+              onPressed: addGroup,
+              icon: const Icon(Icons.add),
+              label: const Text('Ajouter un groupe')),
           const SizedBox(width: 12),
-          OutlinedButton.icon(onPressed: saveProduct, icon: const Icon(Icons.save), label: const Text('Enregistrer')),
+          OutlinedButton.icon(
+              onPressed: saveProduct,
+              icon: const Icon(Icons.save),
+              label: const Text('Enregistrer')),
         ]),
         const SizedBox(height: 12),
 
@@ -499,7 +732,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
         if (editingGroups.isEmpty)
           const Padding(
             padding: EdgeInsets.only(top: 24),
-            child: Text('Aucun groupe. Ajoutez "Pain", "Viande", "Suppléments", "Sauces", etc.'),
+            child:
+                Text('Aucun groupe. Ajoutez "Pain", "Viande", "Suppléments", "Sauces", etc.'),
           ),
       ],
     );
@@ -510,7 +744,11 @@ class _GroupEditor extends StatefulWidget {
   final OptionGroup group;
   final VoidCallback onDelete;
   final VoidCallback onChanged;
-  const _GroupEditor({super.key, required this.group, required this.onDelete, required this.onChanged});
+  const _GroupEditor(
+      {super.key,
+      required this.group,
+      required this.onDelete,
+      required this.onChanged});
   @override
   State<_GroupEditor> createState() => _GroupEditorState();
 }
@@ -537,12 +775,21 @@ class _GroupEditorState extends State<_GroupEditor> {
   }
 
   int get _mode => widget.group.multiple ? 1 : 0;
-  set _mode(int v) { if (v == 0) { minCtrl.text = '1'; maxCtrl.text = '1'; } apply(); setState(() {}); }
+
+  set _mode(int v) {
+    if (v == 0) {
+      minCtrl.text = '1';
+      maxCtrl.text = '1';
+    }
+    apply();
+    setState(() {});
+  }
 
   void addOption() {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     widget.group.items.add(OptionItem(id: id, label: 'Nouvelle option', price: 0));
-    widget.onChanged(); setState(() {});
+    widget.onChanged();
+    setState(() {});
   }
 
   @override
@@ -557,7 +804,8 @@ class _GroupEditorState extends State<_GroupEditor> {
             Expanded(
               child: TextField(
                 controller: titleCtrl,
-                decoration: const InputDecoration(labelText: 'Titre du groupe', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                    labelText: 'Titre du groupe', border: OutlineInputBorder()),
                 onChanged: (_) => apply(),
               ),
             ),
@@ -568,7 +816,9 @@ class _GroupEditorState extends State<_GroupEditor> {
                 DropdownMenuItem(value: 0, child: Text('Choix unique')),
                 DropdownMenuItem(value: 1, child: Text('Choix multiple')),
               ],
-              onChanged: (v) { if (v != null) _mode = v; },
+              onChanged: (v) {
+                if (v != null) _mode = v;
+              },
             ),
             const SizedBox(width: 8),
             IconButton(onPressed: widget.onDelete, icon: const Icon(Icons.delete_outline)),
@@ -577,29 +827,43 @@ class _GroupEditorState extends State<_GroupEditor> {
           Row(children: [
             Expanded(
               child: TextField(
-                controller: minCtrl, keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Sélection min', border: OutlineInputBorder()),
+                controller: minCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                    labelText: 'Sélection min', border: OutlineInputBorder()),
                 onChanged: (_) => apply(),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: TextField(
-                controller: maxCtrl, keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Sélection max', border: OutlineInputBorder()),
+                controller: maxCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                    labelText: 'Sélection max', border: OutlineInputBorder()),
                 onChanged: (_) => apply(),
               ),
             ),
             const SizedBox(width: 8),
-            FilledButton.icon(onPressed: addOption, icon: const Icon(Icons.add), label: const Text('Ajouter une option')),
+            FilledButton.icon(
+                onPressed: addOption,
+                icon: const Icon(Icons.add),
+                label: const Text('Ajouter une option')),
           ]),
           const SizedBox(height: 8),
           for (int i = 0; i < g.items.length; i++)
             _OptionEditor(
               key: ValueKey(g.items[i].id),
               item: g.items[i],
-              onDelete: () { g.items.removeAt(i); widget.onChanged(); setState(() {}); },
-              onChanged: () { widget.onChanged(); setState(() {}); },
+              onDelete: () {
+                g.items.removeAt(i);
+                widget.onChanged();
+                setState(() {});
+              },
+              onChanged: () {
+                widget.onChanged();
+                setState(() {});
+              },
             ),
         ]),
       ),
@@ -611,7 +875,11 @@ class _OptionEditor extends StatefulWidget {
   final OptionItem item;
   final VoidCallback onDelete;
   final VoidCallback onChanged;
-  const _OptionEditor({super.key, required this.item, required this.onDelete, required this.onChanged});
+  const _OptionEditor(
+      {super.key,
+      required this.item,
+      required this.onDelete,
+      required this.onChanged});
   @override
   State<_OptionEditor> createState() => _OptionEditorState();
 }
@@ -625,11 +893,14 @@ class _OptionEditorState extends State<_OptionEditor> {
     labelCtrl.text = widget.item.label;
     priceCtrl.text = widget.item.price.toStringAsFixed(2);
   }
+
   void apply() {
     widget.item.label = labelCtrl.text.trim();
-    widget.item.price = double.tryParse(priceCtrl.text.replaceAll(',', '.')) ?? 0.0;
+    widget.item.price =
+        double.tryParse(priceCtrl.text.replaceAll(',', '.')) ?? 0.0;
     widget.onChanged();
   }
+
   @override
   Widget build(BuildContext context) {
     return ListTile(
@@ -637,20 +908,21 @@ class _OptionEditorState extends State<_OptionEditor> {
       title: Row(children: [
         Expanded(
           child: TextField(
-            controller: labelCtrl,
-            decoration: const InputDecoration(labelText: 'Nom de l’option', border: OutlineInputBorder()),
-            onChanged: (_) => apply(),
-          ),
+              controller: labelCtrl,
+              decoration: const InputDecoration(
+                  labelText: 'Nom de l’option', border: OutlineInputBorder()),
+              onChanged: (_) => apply()),
         ),
         const SizedBox(width: 8),
         SizedBox(
           width: 120,
           child: TextField(
-            controller: priceCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Prix (€)', border: OutlineInputBorder()),
-            onChanged: (_) => apply(),
-          ),
+              controller: priceCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                  labelText: 'Prix (€)', border: OutlineInputBorder()),
+              onChanged: (_) => apply()),
         ),
         IconButton(onPressed: widget.onDelete, icon: const Icon(Icons.delete_outline)),
       ]),
@@ -658,9 +930,9 @@ class _OptionEditorState extends State<_OptionEditor> {
   }
 }
 
-/* =======================
-   WIZARD (BUTONLAR İÇERİKTE, BİRAZ DAHA YUKARIDA)
-   ======================= */
+/// =======================
+///  WIZARD
+/// =======================
 class OrderWizard extends StatefulWidget {
   final Product product;
   const OrderWizard({super.key, required this.product});
@@ -672,14 +944,24 @@ class _OrderWizardState extends State<OrderWizard> {
   int step = 0;
   final Map<String, List<OptionItem>> picked = {};
 
-  void _toggleSingle(OptionGroup g, OptionItem it) { picked[g.id] = [it]; setState(() {}); }
+  void _toggleSingle(OptionGroup g, OptionItem it) {
+    picked[g.id] = [it];
+    setState(() {});
+  }
+
   void _toggleMulti(OptionGroup g, OptionItem it) {
     final list = picked[g.id] ?? [];
     final exists = list.any((e) => e.id == it.id);
-    if (exists) { list.removeWhere((e) => e.id == it.id); }
-    else { if (list.length >= g.maxSelect) return; list.add(it); }
-    picked[g.id] = list; setState(() {});
+    if (exists) {
+      list.removeWhere((e) => e.id == it.id);
+    } else {
+      if (list.length >= g.maxSelect) return;
+      list.add(it);
+    }
+    picked[g.id] = list;
+    setState(() {});
   }
+
   bool _validGroup(OptionGroup g) {
     final n = (picked[g.id] ?? const []).length;
     return n >= g.minSelect && n <= g.maxSelect;
@@ -697,52 +979,66 @@ class _OrderWizardState extends State<OrderWizard> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            if (isSummary) { setState(() => step = groups.isEmpty ? 0 : groups.length - 1); }
-            else if (step > 0) { setState(() => step--); }
-            else { Navigator.pop(context); }
+            if (isSummary) {
+              setState(() => step = groups.isEmpty ? 0 : groups.length - 1);
+            } else if (step > 0) {
+              setState(() => step--);
+            } else {
+              Navigator.pop(context);
+            }
           },
         ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: isSummary
-                ? _Summary(product: widget.product, picked: picked, total: total)
-                : _GroupStep(group: groups[step], picked: picked, toggleSingle: _toggleSingle, toggleMulti: _toggleMulti),
+      body: isSummary
+          ? _Summary(product: widget.product, picked: picked, total: total)
+          : _GroupStep(
+              group: groups[step],
+              picked: picked,
+              toggleSingle: _toggleSingle,
+              toggleMulti: _toggleMulti),
+      // Sabit alt çubuk — ekranın biraz üstünde, kolay erişim
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: const [BoxShadow(blurRadius: 6, color: Colors.black12)],
           ),
-          // Butonlar içerikte, SafeArea ile; alt çubuktan daha yukarı durur
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Row(children: [
-                Expanded(child: OutlinedButton(
-                  onPressed: step == 0 ? null : () => setState(() => step--),
-                  child: const Text('Précédent'),
-                )),
-                const SizedBox(width: 12),
-                Expanded(child: FilledButton(
-                  onPressed: () {
-                    if (isSummary) {
-                      final app = AppScope.of(context);
-                      app.addLineToCart(widget.product, picked);
-                      if (!mounted) return; Navigator.pop(context, true); return;
-                    }
-                    final g = groups[step];
-                    if (!_validGroup(g)) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Sélection invalide pour "${g.title}".')),
-                      );
-                      return;
-                    }
-                    setState(() => step++);
-                  },
-                  child: Text(isSummary ? 'Ajouter au panier' : 'Suivant'),
-                )),
-              ]),
+          child: Row(children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: step == 0 ? null : () => setState(() => step--),
+                child: const Text('Précédent'),
+              ),
             ),
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton(
+                onPressed: () {
+                  if (isSummary) {
+                    final app = AppScope.of(context);
+                    app.addLineToCart(widget.product, picked);
+                    if (!mounted) return;
+                    Navigator.pop(context, true);
+                    return;
+                  }
+                  final g = groups[step];
+                  if (!_validGroup(g)) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                          content: Text('Sélection invalide pour "${g.title}".')),
+                    );
+                    return;
+                  }
+                  setState(() => step++);
+                },
+                child: Text(isSummary ? 'Ajouter au panier' : 'Suivant'),
+              ),
+            ),
+          ]),
+        ),
       ),
     );
   }
@@ -754,10 +1050,11 @@ class _GroupStep extends StatelessWidget {
   final void Function(OptionGroup, OptionItem) toggleSingle;
   final void Function(OptionGroup, OptionItem) toggleMulti;
 
-  const _GroupStep({
-    required this.group, required this.picked,
-    required this.toggleSingle, required this.toggleMulti,
-  });
+  const _GroupStep(
+      {required this.group,
+      required this.picked,
+      required this.toggleSingle,
+      required this.toggleMulti});
 
   @override
   Widget build(BuildContext context) {
@@ -773,7 +1070,10 @@ class _GroupStep extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Text(
-              group.title + (group.multiple ? ' (min ${group.minSelect}, max ${group.maxSelect})' : ''),
+              group.title +
+                  (group.multiple
+                      ? ' (min ${group.minSelect}, max ${group.maxSelect})'
+                      : ''),
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
           );
@@ -783,26 +1083,41 @@ class _GroupStep extends StatelessWidget {
 
         return InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => group.multiple ? toggleMulti(group, it) : toggleSingle(group, it),
+          onTap: () =>
+              group.multiple ? toggleMulti(group, it) : toggleSingle(group, it),
           child: Ink(
             decoration: BoxDecoration(
               color: selected ? color.primaryContainer : color.surfaceVariant,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: selected ? color.primary : color.outlineVariant),
+              border: Border.all(
+                  color: selected ? color.primary : color.outlineVariant),
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               child: Row(children: [
                 Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(it.label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                    if (it.price != 0)
-                      Text('+ €${it.price.toStringAsFixed(2)}', style: TextStyle(color: color.onSurfaceVariant)),
-                  ]),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(it.label,
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w600)),
+                        if (it.price != 0)
+                          Text('+ €${it.price.toStringAsFixed(2)}',
+                              style: TextStyle(color: color.onSurfaceVariant)),
+                      ]),
                 ),
                 group.multiple
-                    ? Checkbox(value: selected, onChanged: (_) => toggleMulti(group, it))
-                    : Radio<bool>(value: true, groupValue: selected, onChanged: (_) => toggleSingle(group, it)),
+                    ? Checkbox(
+                        value: selected,
+                        onChanged: (_) => toggleMulti(group, it),
+                      )
+                    : Radio<bool>(
+                        value: true,
+                        groupValue: selected,
+                        onChanged: (_) => toggleSingle(group, it),
+                      ),
               ]),
             ),
           ),
@@ -816,14 +1131,16 @@ class _Summary extends StatelessWidget {
   final Product product;
   final Map<String, List<OptionItem>> picked;
   final double total;
-  const _Summary({required this.product, required this.picked, required this.total});
+  const _Summary(
+      {required this.product, required this.picked, required this.total});
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        Text('Récapitulatif — ${product.name}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text('Récapitulatif — ${product.name}',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         for (final g in product.groups)
           if ((picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
@@ -832,24 +1149,29 @@ class _Summary extends StatelessWidget {
             for (final it in (picked[g.id] ?? const <OptionItem>[]))
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Text('• ${it.label}'),
-                Text(it.price == 0 ? '€0.00' : '€${it.price.toStringAsFixed(2)}'),
+                Text(it.price == 0
+                    ? '€0.00'
+                    : '€${it.price.toStringAsFixed(2)}'),
               ]),
             const SizedBox(height: 8),
             const Divider(),
           ],
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('SOUS-TOTAL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          Text('€${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text('SOUS-TOTAL',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text('€${total.toStringAsFixed(2)}',
+              style:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         ]),
-        const SizedBox(height: 24),
+        const SizedBox(height: 80),
       ],
     );
   }
 }
 
-/* =======================
-   PAGE 3 : PANIER
-   ======================= */
+/// =======================
+///  PAGE 3: SEPET
+/// =======================
 class CartPage extends StatelessWidget {
   const CartPage({super.key});
   @override
@@ -873,7 +1195,8 @@ class CartPage extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
           child: Row(children: [
-            const Text('Panier', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('Panier',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Spacer(),
             TextButton.icon(
               onPressed: () => app.clearCart(),
@@ -898,13 +1221,17 @@ class CartPage extends StatelessWidget {
                   children: [
                     for (final g in l.product.groups)
                       if ((l.picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
-                        Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text(g.title,
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
                         for (final it in (l.picked[g.id] ?? const <OptionItem>[]))
-                          Text('• ${it.label}${it.price == 0 ? '' : ' (+€${it.price.toStringAsFixed(2)})'}'),
+                          Text(
+                              '• ${it.label}${it.price == 0 ? '' : ' (+€${it.price.toStringAsFixed(2)})'}'),
                       ],
                   ],
                 ),
-                trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => app.removeCartLineAt(i)),
+                trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => app.removeCartLineAt(i)),
               );
             },
           ),
@@ -912,9 +1239,13 @@ class CartPage extends StatelessWidget {
         const Divider(height: 1),
         Padding(
           padding: const EdgeInsets.all(12),
-          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            const Text('TOTAL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text('€${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          child:
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            const Text('TOTAL',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('€${total.toStringAsFixed(2)}',
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ]),
         ),
         Padding(
@@ -939,9 +1270,9 @@ class CartPage extends StatelessWidget {
   }
 }
 
-/* =======================
-   PAGE 4 : COMMANDES + YAZDIRMA
-   ======================= */
+/// =======================
+///  PAGE 4: SİPARİŞLER
+/// =======================
 class OrdersPage extends StatelessWidget {
   const OrdersPage({super.key});
   @override
@@ -964,31 +1295,26 @@ class OrdersPage extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
           child: Row(children: [
-            const Text('Commandes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('Commandes',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Spacer(),
             TextButton.icon(
               onPressed: () async {
-                final newIp = await _pickPrinterIpDialog(context);
-                if (newIp != null && newIp.isNotEmpty) {
-                  await _savePrinterIp(newIp);
-                  _snack(context, 'Kayıtlı yazıcı: $newIp');
-                }
-              },
-              icon: const Icon(Icons.print),
-              label: const Text('Yazıcıyı değiştir'),
-            ),
-            const SizedBox(width: 8),
-            TextButton.icon(
-              onPressed: () async {
-                final pinOk = await _askPin(context); if (!pinOk) return;
+                final pinOk = await _askPin(context);
+                if (!pinOk) return;
                 final ok = await showDialog<bool>(
                   context: context,
                   builder: (_) => AlertDialog(
                     title: const Text('Fin de journée ?'),
-                    content: const Text('Toutes les commandes seront supprimées. Action irréversible.'),
+                    content: const Text(
+                        'Toutes les commandes seront supprimées. Action irréversible.'),
                     actions: [
-                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
-                      FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Supprimer')),
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Annuler')),
+                      FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Supprimer')),
                     ],
                   ),
                 );
@@ -1010,64 +1336,100 @@ class OrdersPage extends StatelessWidget {
               final who = o.customer.isEmpty ? '' : ' — ${o.customer}';
               return ListTile(
                 leading: const Icon(Icons.receipt),
-                title: Text('Commande$who • ${o.lines.length} article(s) • €${o.total.toStringAsFixed(2)}'),
+                title: Text(
+                    'Commande$who • ${o.lines.length} article(s) • €${o.total.toStringAsFixed(2)}'),
                 subtitle: Text(
-                  '${o.createdAt.hour.toString().padLeft(2, '0')}:${o.createdAt.minute.toString().padLeft(2, '0')} '
-                  '${o.createdAt.day.toString().padLeft(2, '0')}/${o.createdAt.month.toString().padLeft(2, '0')}',
-                ),
+                    '${o.createdAt.hour.toString().padLeft(2, '0')}:${o.createdAt.minute.toString().padLeft(2, '0')} '
+                    '${o.createdAt.day.toString().padLeft(2, '0')}/${o.createdAt.month.toString().padLeft(2, '0')}'),
                 trailing: IconButton(
-                  icon: const Icon(Icons.print_outlined),
-                  onPressed: () => _printOrderWeb(context, o),
                   tooltip: 'Imprimer',
+                  icon: const Icon(Icons.print_outlined),
+                  onPressed: () async {
+                    final res = await AppScope.of(context).printOrder(o);
+                    final text = (res == PosPrintResult.success)
+                        ? 'Ticket envoyé à ${AppScope.of(context).printerIp}'
+                        : 'Impression échouée (${res.name}). IP: ${AppScope.of(context).printerIp}';
+                    _snack(context, text);
+                  },
                 ),
                 onTap: () {
-                  showDialog(context: context, builder: (_) {
-                    return AlertDialog(
-                      title: const Text('Détails de la commande'),
-                      content: SizedBox(
-                        width: 360,
-                        child: ListView(
-                          shrinkWrap: true,
-                          children: [
-                            if (o.customer.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: Text('Client: ${o.customer}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                              ),
-                            for (int idx = 0; idx < o.lines.length; idx++) ...[
-                              Text('Article ${idx+1}: ${o.lines[idx].product.name}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold)),
-                              for (final g in o.lines[idx].product.groups)
-                                if ((o.lines[idx].picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
-                                  Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  for (final it in (o.lines[idx].picked[g.id] ?? const <OptionItem>[]))
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text('• ${it.label}'),
-                                        Text(it.price == 0 ? '€0.00' : '€${it.price.toStringAsFixed(2)}'),
-                                      ],
-                                    ),
-                                ],
-                              const Divider(),
-                            ],
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold)),
-                                Text('€${o.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  showDialog(
+                    context: context,
+                    builder: (_) {
+                      return AlertDialog(
+                        title: const Text('Détails de la commande'),
+                        content: SizedBox(
+                          width: 360,
+                          child: ListView(
+                            shrinkWrap: true,
+                            children: [
+                              if (o.customer.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Text('Client: ${o.customer}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                ),
+                              for (int idx = 0; idx < o.lines.length; idx++) ...[
+                                Text('Article ${idx + 1}: ${o.lines[idx].product.name}',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold)),
+                                for (final g in o.lines[idx].product.groups)
+                                  if ((o.lines[idx].picked[g.id] ??
+                                              const <OptionItem>[])
+                                          .isNotEmpty) ...[
+                                    Text(g.title,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold)),
+                                    for (final it in (o.lines[idx].picked[g.id] ??
+                                        const <OptionItem>[]))
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text('• ${it.label}'),
+                                          Text(it.price == 0
+                                              ? '€0.00'
+                                              : '€${it.price.toStringAsFixed(2)}'),
+                                        ],
+                                      ),
+                                  ],
+                                const Divider(),
                               ],
-                            ),
-                          ],
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('TOTAL',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                  Text('€${o.total.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      actions: [
-                        TextButton(onPressed: () => _printOrderWeb(context, o), child: const Text('Imprimer')),
-                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fermer')),
-                      ],
-                    );
-                  });
+                        actions: [
+                          TextButton(
+                              onPressed: () async {
+                                final res =
+                                    await AppScope.of(context).printOrder(o);
+                                final text =
+                                    (res == PosPrintResult.success)
+                                        ? 'Ticket envoyé à ${AppScope.of(context).printerIp}'
+                                        : 'Impression échouée (${res.name}). IP: ${AppScope.of(context).printerIp}';
+                                if (context.mounted) _snack(context, text);
+                              },
+                              child: const Text('Imprimer')),
+                          TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Fermer')),
+                        ],
+                      );
+                    },
+                  );
                 },
               );
             },
@@ -1078,206 +1440,9 @@ class OrdersPage extends StatelessWidget {
   }
 }
 
-/* =======================
-   AĞ YAZICISI: IP SEÇME / KAYDETME / YAZDIRMA
-   ======================= */
-
-Future<void> _savePrinterIp(String ip) async {
-  final sp = await SharedPreferences.getInstance();
-  await sp.setString(_kSavedPrinterIp, ip);
-}
-
-Future<String?> _loadPrinterIp() async {
-  final sp = await SharedPreferences.getInstance();
-  return sp.getString(_kSavedPrinterIp);
-}
-
-Future<List<String>> _scanEscPosPrinters({int port = _kDefaultPosPort, Duration timeout = const Duration(milliseconds: 200)}) async {
-  final info = NetworkInfo();
-  final wifiIP = await info.getWifiIP(); // ör: 192.168.1.23
-  if (wifiIP == null || !wifiIP.contains('.')) return [];
-  final parts = wifiIP.split('.');
-  final prefix = '${parts[0]}.${parts[1]}.${parts[2]}.';
-
-  final found = <String>[];
-  final futures = <Future>[];
-  for (int i = 1; i <= 254; i++) {
-    final host = '$prefix$i';
-    futures.add(Socket.connect(host, port, timeout: timeout).then((s) {
-      found.add(host);
-      s.destroy();
-    }).catchError((_) {}));
-  }
-  await Future.wait(futures, eagerError: false);
-  return found..sort();
-}
-
-Future<String?> _pickPrinterIpDialog(BuildContext context) async {
-  final ipsFuture = _scanEscPosPrinters();
-
-  return showDialog<String>(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) {
-      String manual = '';
-      return AlertDialog(
-        title: const Text('Yazıcı Seç'),
-        content: SizedBox(
-          width: 360,
-          child: FutureBuilder<List<String>>(
-            future: ipsFuture,
-            builder: (c, snap) {
-              final ips = snap.data ?? [];
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (!snap.hasData)
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-                          SizedBox(width: 12),
-                          Expanded(child: Text('Ağ taranıyor… (ESC/POS 9100)')),
-                        ],
-                      ),
-                    ),
-                  if (ips.isNotEmpty)
-                    SizedBox(
-                      height: 180,
-                      child: ListView.separated(
-                        itemCount: ips.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (_, i) => ListTile(
-                          leading: const Icon(Icons.print),
-                          title: Text(ips[i]),
-                          onTap: () => Navigator.pop(ctx, ips[i]),
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 8),
-                  const Text('Bulunamadıysa IP girin:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  TextField(
-                    decoration: const InputDecoration(
-                      hintText: 'örn. 192.168.1.100',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (v) => manual = v.trim(),
-                    onSubmitted: (_) => Navigator.pop(ctx, manual),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('İptal')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, manual), child: const Text('Kaydet')),
-        ],
-      );
-    },
-  );
-}
-
-Future<void> _printOrderWeb(BuildContext context, SavedOrder o) async {
-  try {
-    String? ip = await _loadPrinterIp();
-    if (ip == null || ip.isEmpty) {
-      ip = await _pickPrinterIpDialog(context);
-      if (ip == null || ip.isEmpty) {
-        _snack(context, 'Yazıcı seçilmedi.');
-        return;
-      }
-      await _savePrinterIp(ip);
-    }
-
-    final profile = await esc.CapabilityProfile.load();
-    final printer = NetworkPrinter(esc.PaperSize.mm80, profile);
-    final res = await printer.connect(ip, port: _kDefaultPosPort);
-    if (res != PosPrintResult.success) {
-      _snack(context, 'Bağlantı hatası: $res');
-      return;
-    }
-
-    printer.text('Commande Sur Place',
-        styles: esc.PosStyles(
-          align: esc.PosAlign.center,
-          bold: true,
-          height: esc.PosTextSize.size2,
-          width: esc.PosTextSize.size2,
-        ));
-    printer.hr();
-
-    final dt = o.createdAt;
-    final hh = dt.hour.toString().padLeft(2, '0');
-    final mm = dt.minute.toString().padLeft(2, '0');
-    final dd = dt.day.toString().padLeft(2, '0');
-    final mo = dt.month.toString().padLeft(2, '0');
-
-    if (o.customer.isNotEmpty) {
-      printer.text('Müşteri: ${o.customer}', styles: esc.PosStyles(bold: true));
-    }
-    printer.text('Saat: $hh:$mm   Tarih: $dd/$mo');
-    printer.hr();
-
-    for (int i = 0; i < o.lines.length; i++) {
-      final line = o.lines[i];
-      printer.text('${i + 1}. ${line.product.name}', styles: esc.PosStyles(bold: true));
-
-      for (final g in line.product.groups) {
-        final picks = line.picked[g.id] ?? const <OptionItem>[];
-        if (picks.isEmpty) continue;
-        printer.text(g.title, styles: esc.PosStyles(underline: true));
-        for (final it in picks) {
-          final price = it.price == 0 ? '' : '+€${it.price.toStringAsFixed(2)}';
-          printer.row([
-            esc.PosColumn(text: ' • ${it.label}', width: 10),
-            esc.PosColumn(text: price, width: 2, styles: esc.PosStyles(align: esc.PosAlign.right)),
-          ]);
-        }
-      }
-
-      printer.row([
-        esc.PosColumn(text: 'Ara toplam', width: 10),
-        esc.PosColumn(
-          text: '€${line.total.toStringAsFixed(2)}',
-          width: 2,
-          styles: esc.PosStyles(align: esc.PosAlign.right, bold: true),
-        ),
-      ]);
-      printer.hr(ch: '-');
-    }
-
-    printer.row([
-      esc.PosColumn(text: 'TOPLAM', width: 8, styles: esc.PosStyles(bold: true, height: esc.PosTextSize.size2)),
-      esc.PosColumn(
-        text: '€${o.total.toStringAsFixed(2)}',
-        width: 4,
-        styles: esc.PosStyles(
-          align: esc.PosAlign.right,
-          bold: true,
-          height: esc.PosTextSize.size2,
-          width: esc.PosTextSize.size2,
-        ),
-      ),
-    ]);
-
-    printer.hr();
-    printer.text('Teşekkürler!', styles: esc.PosStyles(align: esc.PosAlign.center));
-    printer.feed(2);
-    printer.cut();
-    printer.disconnect();
-
-    _snack(context, 'Fiş yazdırıldı.');
-  } catch (e) {
-    _snack(context, 'Yazdırma hatası: $e');
-  }
-}
-
-/* =======================
-   DİYALOGLAR & UTIL
-   ======================= */
+/// =======================
+///  DİYALOGLAR & UTIL
+/// =======================
 Future<bool> _askPin(BuildContext context) async {
   final ctrl = TextEditingController();
   final ok = await showDialog<bool>(
@@ -1285,16 +1450,27 @@ Future<bool> _askPin(BuildContext context) async {
     builder: (ctx) => AlertDialog(
       title: const Text('Code PIN requis'),
       content: TextField(
-        controller: ctrl, keyboardType: TextInputType.number, obscureText: true, maxLength: 8,
-        decoration: const InputDecoration(labelText: 'Entrez le code', border: OutlineInputBorder()),
+        controller: ctrl,
+        keyboardType: TextInputType.number,
+        obscureText: true,
+        maxLength: 8,
+        decoration: const InputDecoration(
+            labelText: 'Entrez le code', border: OutlineInputBorder()),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim() == _ADMIN_PIN), child: const Text('Valider')),
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler')),
+        FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim() == _ADMIN_PIN),
+            child: const Text('Valider')),
       ],
     ),
   );
-  if (ok != true) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code incorrect.'))); }
+  if (ok != true) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Code incorrect.')));
+  }
   return ok == true;
 }
 
@@ -1311,7 +1487,8 @@ Future<String?> _askCustomerName(BuildContext context) async {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                controller: ctrl, autofocus: true,
+                controller: ctrl,
+                autofocus: true,
                 decoration: InputDecoration(
                   labelText: 'Écrire le nom',
                   border: const OutlineInputBorder(),
@@ -1328,11 +1505,16 @@ Future<String?> _askCustomerName(BuildContext context) async {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Annuler')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, null),
+                child: const Text('Annuler')),
             FilledButton(
               onPressed: () {
                 final name = ctrl.text.trim();
-                if (name.isEmpty) { setState(() => error = 'Le nom est requis.'); return; }
+                if (name.isEmpty) {
+                  setState(() => error = 'Le nom est requis.');
+                  return;
+                }
                 Navigator.pop(ctx, name);
               },
               child: const Text('Valider'),
@@ -1344,43 +1526,50 @@ Future<String?> _askCustomerName(BuildContext context) async {
   );
 }
 
-void _snack(BuildContext ctx, String msg) {
-  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(msg)));
+Future<void> _askPrinterIp(BuildContext context) async {
+  final app = AppScope.of(context);
+  final ctrl = TextEditingController(text: app.printerIp);
+  String? error;
+  final ip = await showDialog<String>(
+    context: context,
+    builder: (ctx) {
+      return StatefulBuilder(builder: (ctx, setState) {
+        return AlertDialog(
+          title: const Text('Adresse IP du Printer'),
+          content: TextField(
+            controller: ctrl,
+            decoration: InputDecoration(
+              labelText: 'ex: 192.168.1.1',
+              border: const OutlineInputBorder(),
+              errorText: error,
+            ),
+            onSubmitted: (_) => Navigator.pop(ctx, ctrl.text.trim()),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, null),
+                child: const Text('Annuler')),
+            FilledButton(
+                onPressed: () {
+                  final v = ctrl.text.trim();
+                  if (v.isEmpty) {
+                    setState(() => error = 'IP requise');
+                  } else {
+                    Navigator.pop(ctx, v);
+                  }
+                },
+                child: const Text('Enregistrer')),
+          ],
+        );
+      });
+    },
+  );
+  if (ip != null) {
+    app.printerIp = ip;
+    _snack(context, 'IP enregistrée: ${app.printerIp}');
+  }
 }
 
-/* =======================
-   Choisir butonu (kırılma yok)
-   ======================= */
-Widget choisirButton(VoidCallback onTap, BuildContext context) {
-  final w = MediaQuery.of(context).size.width;
-  final isTiny = w < 360; // çok dar telefonlar
-
-  if (isTiny) {
-    return FilledButton.icon(
-      onPressed: onTap,
-      icon: const Icon(Icons.shopping_cart_outlined, size: 20),
-      label: const SizedBox.shrink(),
-      style: FilledButton.styleFrom(
-        shape: const StadiumBorder(),
-        minimumSize: const Size(56, 44),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      ),
-    );
-  }
-
-  return FilledButton.icon(
-    onPressed: onTap,
-    icon: const Icon(Icons.shopping_cart_outlined, size: 20),
-    label: const Text(
-      'Choisir',
-      maxLines: 1,
-      softWrap: false,
-      overflow: TextOverflow.fade,
-    ),
-    style: FilledButton.styleFrom(
-      shape: const StadiumBorder(),
-      minimumSize: const Size(120, 44),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-    ),
-  );
+void _snack(BuildContext ctx, String msg) {
+  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(msg)));
 }
