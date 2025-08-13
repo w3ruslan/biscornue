@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
-// UYUMLU PAKETLER İÇİN SADECE DOĞRU IMPORT SATIRLARI
+// UYUMLU PAKETLER İÇİN DOĞRU IMPORT SATIRLARI
 import 'package:esc_pos_printer_plus/esc_pos_printer_plus.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils.dart' as esc;
 
@@ -26,7 +26,7 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Commande Sur Place',
+      title: 'BISCORNUE',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(useMaterial3: true),
       home: const Home(),
@@ -230,7 +230,7 @@ class _HomeState extends State<Home> {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Commande Sur Place')),
+      appBar: AppBar(title: const Text('BISCORNUE')),
       body: pages[index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
@@ -1202,7 +1202,7 @@ Future<void> _printOrderWeb(BuildContext context, SavedOrder o) async {
       return;
     }
 
-    printer.text('Commande Sur Place',
+    printer.text('BISCORNUE',
         styles: esc.PosStyles(
           align: esc.PosAlign.center,
           bold: true,
