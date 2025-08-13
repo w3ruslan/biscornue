@@ -1,78 +1,24 @@
-name: Android APK (arm64 release)
+name: surplace_pos
+description: Simple POS app
+publish_to: "none"
 
-on:
-  workflow_dispatch:        # Elle çalıştırmak için
-  push:
-    branches: [ main ]      # İstersen, sadece elle tetiklemek için bunu silebilirsin
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.22.0"
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences: ^2.2.2
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  # Yalnızca PLUS sürüm (diğerini kesinlikle eklemiyoruz)
+  esc_pos_utils_plus: ^2.0.1+6
+  ping_discover_network: ^2.0.0
 
-      - name: Set up Flutter (stable 3.22.0)
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.22.0"
-          channel: "stable"
-          cache: true
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
 
-      # android klasörü yoksa oluştur
-      - name: Ensure Android platform exists
-        shell: bash
-        run: |
-          if [ ! -f android/app/src/main/AndroidManifest.xml ]; then
-            echo "android/ not found; creating Android platform..."
-            flutter create . --platforms=android
-          else
-            echo "android/ already exists."
-          fi
-
-      # Gradle cache'i android oluştuktan sonra açıyoruz (önce açınca hata veriyordu)
-      - name: Set up Java (JDK 17)
-        uses: actions/setup-java@v4
-        with:
-          java-version: "17"
-          distribution: "temurin"
-          cache: "gradle"
-
-      # (İsteğe bağlı ama önerilir) Release manifest'te INTERNET iznini garanti et
-      - name: Ensure INTERNET permission in release Manifest
-        shell: bash
-        run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
-            echo "Adding INTERNET permission to $MANIFEST"
-            sed -i '0,/<manifest[^>]*>/s//&\
-    <uses-permission android:name="android.permission.INTERNET" \/>/' "$MANIFEST"
-          fi
-          echo "Final manifest:"
-          cat "$MANIFEST"
-
-      # Ağ hataları olursa birkaç kez dene
-      - name: Flutter pub get (retry)
-        shell: bash
-        run: |
-          for i in {1..5}; do
-            flutter pub get && break
-            echo "Retrying flutter pub get ($i/5)..."
-            sleep 10
-          done
-
-      # ARM64 için release APK (ayrı abi)
-      - name: Build APK (arm64, release)
-        run: |
-          flutter build apk --release --split-per-abi --target-platform=android-arm64
-
-      # APK'yı indirilebilir artifact olarak yükle
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-arm64-release
-          path: |
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: warn
+flutter:
+  uses-material-design: true
