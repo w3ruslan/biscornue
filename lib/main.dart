@@ -1,17 +1,17 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
-// UYUMLU PAKETLER İÇİN DOĞRU IMPORT SATIRLARI
-import 'package:esc_pos_printer_plus/esc_pos_printer_plus.dart';
-import 'package:esc_pos_utils_plus/esc_pos_utils.dart' as esc;
 
 /* =======================
     Sabitler
     ======================= */
+// LÜTFEN BU IP ADRESİNİ KENDİ YAZICINIZIN IP ADRESİYLE DEĞİŞTİRİN
+const String PRINTER_IP = '192.168.1.1'; // <-- Epson yazıcının IP'si
+const int    PRINTER_PORT = 9100;        // Genelde 9100 (RAW)
+
 const String _ADMIN_PIN = '6538';
-const String _kSavedPrinterIp = 'printer_ip';
-const int _kDefaultPosPort = 9100;
 
 /* =======================
     ENTRY
@@ -967,17 +967,7 @@ class OrdersPage extends StatelessWidget {
           child: Row(children: [
             const Text('Commandes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Spacer(),
-            TextButton.icon(
-              onPressed: () async {
-                final newIp = await _pickPrinterIpDialog(context);
-                if (newIp != null && newIp.isNotEmpty) {
-                  await _savePrinterIp(newIp);
-                  _snack(context, 'Kayıtlı yazıcı: $newIp');
-                }
-              },
-              icon: const Icon(Icons.print),
-              label: const Text('Yazıcıyı değiştir'),
-            ),
+            // YAZICI DEĞİŞTİRME BUTONU KALDIRILDI, ARTIK GEREKLİ DEĞİL
             const SizedBox(width: 8),
             TextButton.icon(
               onPressed: () async {
@@ -1016,9 +1006,25 @@ class OrdersPage extends StatelessWidget {
                   '${o.createdAt.hour.toString().padLeft(2, '0')}:${o.createdAt.minute.toString().padLeft(2, '0')} '
                   '${o.createdAt.day.toString().padLeft(2, '0')}/${o.createdAt.month.toString().padLeft(2, '0')}',
                 ),
+                // YAZDIRMA BUTONU YENİ FONKSİYONA BAĞLANDI
                 trailing: IconButton(
                   icon: const Icon(Icons.print_outlined),
-                  onPressed: () => _printOrderWeb(context, o),
+                  onPressed: () async {
+                    try {
+                      await printOrderAndroid(o);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Fiş yazıcıya gönderildi.')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Yazdırma hatası: $e')),
+                        );
+                      }
+                    }
+                  },
                   tooltip: 'Imprimer',
                 ),
                 onTap: () {
@@ -1064,7 +1070,27 @@ class OrdersPage extends StatelessWidget {
                         ),
                       ),
                       actions: [
-                        TextButton(onPressed: () => _printOrderWeb(context, o), child: const Text('Imprimer')),
+                        // DİYALOG İÇİNDEKİ YAZDIRMA BUTONU DA YENİ FONKSİYONA BAĞLANDI
+                        TextButton(
+                          onPressed: () async {
+                            try {
+                              await printOrderAndroid(o);
+                              if (context.mounted) {
+                                Navigator.pop(context); // Diyalogu kapat
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Fiş yazıcıya gönderildi.')),
+                                );
+                              }
+                            } catch (e) {
+                               if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Yazdırma hatası: $e')),
+                                );
+                              }
+                            }
+                          },
+                          child: const Text('Imprimer'),
+                        ),
                         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fermer')),
                       ],
                     );
@@ -1076,204 +1102,6 @@ class OrdersPage extends StatelessWidget {
         ),
       ],
     );
-  }
-}
-
-/* =======================
-    AĞ YAZICISI: IP SEÇME / KAYDETME / YAZDIRMA
-    ======================= */
-
-Future<void> _savePrinterIp(String ip) async {
-  final sp = await SharedPreferences.getInstance();
-  await sp.setString(_kSavedPrinterIp, ip);
-}
-
-Future<String?> _loadPrinterIp() async {
-  final sp = await SharedPreferences.getInstance();
-  return sp.getString(_kSavedPrinterIp);
-}
-
-Future<List<String>> _scanEscPosPrinters({int port = _kDefaultPosPort, Duration timeout = const Duration(milliseconds: 200)}) async {
-  final info = NetworkInfo();
-  final wifiIP = await info.getWifiIP(); // ör: 192.168.1.23
-  if (wifiIP == null || !wifiIP.contains('.')) return [];
-  final parts = wifiIP.split('.');
-  final prefix = '${parts[0]}.${parts[1]}.${parts[2]}.';
-
-  final found = <String>[];
-  final futures = <Future>[];
-  for (int i = 1; i <= 254; i++) {
-    final host = '$prefix$i';
-    futures.add(Socket.connect(host, port, timeout: timeout).then((s) {
-      found.add(host);
-      s.destroy();
-    }).catchError((_) {}));
-  }
-  await Future.wait(futures, eagerError: false);
-  return found..sort();
-}
-
-Future<String?> _pickPrinterIpDialog(BuildContext context) async {
-  final ipsFuture = _scanEscPosPrinters();
-
-  return showDialog<String>(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) {
-      String manual = '';
-      return AlertDialog(
-        title: const Text('Yazıcı Seç'),
-        content: SizedBox(
-          width: 360,
-          child: FutureBuilder<List<String>>(
-            future: ipsFuture,
-            builder: (c, snap) {
-              final ips = snap.data ?? [];
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (!snap.hasData)
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-                          SizedBox(width: 12),
-                          Expanded(child: Text('Ağ taranıyor… (ESC/POS 9100)')),
-                        ],
-                      ),
-                    ),
-                  if (ips.isNotEmpty)
-                    SizedBox(
-                      height: 180,
-                      child: ListView.separated(
-                        itemCount: ips.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (_, i) => ListTile(
-                          leading: const Icon(Icons.print),
-                          title: Text(ips[i]),
-                          onTap: () => Navigator.pop(ctx, ips[i]),
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 8),
-                  const Text('Bulunamadıysa IP girin:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  TextField(
-                    decoration: const InputDecoration(
-                      hintText: 'örn. 192.168.1.100',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (v) => manual = v.trim(),
-                    onSubmitted: (_) => Navigator.pop(ctx, manual),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('İptal')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, manual), child: const Text('Kaydet')),
-        ],
-      );
-    },
-  );
-}
-
-Future<void> _printOrderWeb(BuildContext context, SavedOrder o) async {
-  try {
-    String? ip = await _loadPrinterIp();
-    if (ip == null || ip.isEmpty) {
-      if (!context.mounted) return;
-      ip = await _pickPrinterIpDialog(context);
-      if (ip == null || ip.isEmpty) {
-        _snack(context, 'Yazıcı seçilmedi.');
-        return;
-      }
-      await _savePrinterIp(ip);
-    }
-
-    final profile = await esc.CapabilityProfile.load();
-    final printer = NetworkPrinter(esc.PaperSize.mm80, profile);
-    final res = await printer.connect(ip, port: _kDefaultPosPort);
-    if (res != PosPrintResult.success) {
-      _snack(context, 'Bağlantı hatası: $res');
-      return;
-    }
-
-    printer.text('BISCORNUE',
-        styles: esc.PosStyles(
-          align: esc.PosAlign.center,
-          bold: true,
-          height: esc.PosTextSize.size2,
-          width: esc.PosTextSize.size2,
-        ));
-    printer.hr();
-
-    final dt = o.createdAt;
-    final hh = dt.hour.toString().padLeft(2, '0');
-    final mm = dt.minute.toString().padLeft(2, '0');
-    final dd = dt.day.toString().padLeft(2, '0');
-    final mo = dt.month.toString().padLeft(2, '0');
-
-    if (o.customer.isNotEmpty) {
-      printer.text('Müşteri: ${o.customer}', styles: esc.PosStyles(bold: true));
-    }
-    printer.text('Saat: $hh:$mm    Tarih: $dd/$mo');
-    printer.hr();
-
-    for (int i = 0; i < o.lines.length; i++) {
-      final line = o.lines[i];
-      printer.text('${i + 1}. ${line.product.name}', styles: esc.PosStyles(bold: true));
-
-      for (final g in line.product.groups) {
-        final picks = line.picked[g.id] ?? const <OptionItem>[];
-        if (picks.isEmpty) continue;
-        printer.text(g.title, styles: esc.PosStyles(underline: true));
-        for (final it in picks) {
-          final price = it.price == 0 ? '' : '+€${it.price.toStringAsFixed(2)}';
-          printer.row([
-            esc.PosColumn(text: ' • ${it.label}', width: 10),
-            esc.PosColumn(text: price, width: 2, styles: esc.PosStyles(align: esc.PosAlign.right)),
-          ]);
-        }
-      }
-
-      printer.row([
-        esc.PosColumn(text: 'Ara toplam', width: 10),
-        esc.PosColumn(
-          text: '€${line.total.toStringAsFixed(2)}',
-          width: 2,
-          styles: esc.PosStyles(align: esc.PosAlign.right, bold: true),
-        ),
-      ]);
-      printer.hr(ch: '-');
-    }
-
-    printer.row([
-      esc.PosColumn(text: 'TOPLAM', width: 8, styles: esc.PosStyles(bold: true, height: esc.PosTextSize.size2)),
-      esc.PosColumn(
-        text: '€${o.total.toStringAsFixed(2)}',
-        width: 4,
-        styles: esc.PosStyles(
-          align: esc.PosAlign.right,
-          bold: true,
-          height: esc.PosTextSize.size2,
-          width: esc.PosTextSize.size2,
-        ),
-      ),
-    ]);
-
-    printer.hr();
-    printer.text('Teşekkürler!', styles: esc.PosStyles(align: esc.PosAlign.center));
-    printer.feed(2);
-    printer.cut();
-    printer.disconnect();
-
-    _snack(context, 'Fiş yazdırıldı.');
-  } catch (e) {
-    _snack(context, 'Yazdırma hatası: $e');
   }
 }
 
@@ -1296,7 +1124,7 @@ Future<bool> _askPin(BuildContext context) async {
       ],
     ),
   );
-  if (ok != true) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code incorrect.'))); }
+  if (ok != true && context.mounted) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code incorrect.'))); }
   return ok == true;
 }
 
@@ -1387,4 +1215,69 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
     ),
   );
+}
+
+// ==================================================
+// YENİ, PAKETSİZ YAZDIRMA YARDIMCILARI
+// ==================================================
+
+String _two(int n) => n.toString().padLeft(2, '0');
+
+String _sanitize(String s) {
+  // ESC/POS çoğunlukla ASCII; TR/FR karakterleri sadeleştir
+  const map = {
+    'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
+    'ş':'s','Ş':'S','ü':'u','Ü':'U','é':'e','è':'e','ê':'e','á':'a','à':'a','â':'a',
+    'ô':'o','ù':'u','€':' EUR ','–':'-','—':'-','…':'...'
+  };
+  final b = StringBuffer();
+  for (final r in s.runes) {
+    final ch = String.fromCharCode(r);
+    b.write(map[ch] ?? ch);
+  }
+  return b.toString();
+}
+
+Future<void> printOrderAndroid(SavedOrder o) async {
+  final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
+
+  void writeText(String t) => socket.add(ascii.encode(_sanitize(t)));
+  void cmd(List<int> bytes) => socket.add(bytes);
+
+  // ESC @ (init)
+  cmd([27, 64]);
+
+  // Başlık merkez
+  cmd([27, 97, 1]); // ESC a 1 (center)
+  writeText('*** BISCORNUE ***\n');
+  if (o.customer.isNotEmpty) writeText('Client: ${o.customer}\n');
+  final d = o.createdAt;
+  writeText('${_two(d.day)}/${_two(d.month)}/${d.year} ${_two(d.hour)}:${_two(d.minute)}\n');
+  cmd([27, 97, 0]); // sola dön
+  writeText('------------------------------\n');
+
+  for (int i = 0; i < o.lines.length; i++) {
+    final l = o.lines[i];
+    writeText('Item ${i + 1}: ${l.product.name}\n');
+    for (final g in l.product.groups) {
+      final sel = l.picked[g.id] ?? const <OptionItem>[];
+      if (sel.isNotEmpty) {
+        writeText('  ${g.title}:\n');
+        for (final it in sel) {
+          final p = it.price == 0 ? '' : ' (+${it.price.toStringAsFixed(2)} EUR)';
+          writeText('    • ${it.label}$p\n');
+        }
+      }
+    }
+    writeText('\n');
+  }
+
+  writeText('------------------------------\n');
+  writeText('TOTAL: ${o.total.toStringAsFixed(2)} EUR\n');
+
+  // 2 satır besle + kısmi kes (GS V 66 0) — çoğu Epson’da çalışır
+  cmd([10, 10, 29, 86, 66, 0]);
+
+  await socket.flush();
+  await socket.close();
 }
