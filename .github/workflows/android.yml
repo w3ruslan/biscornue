@@ -20,12 +20,12 @@ jobs:
         uses: actions/checkout@v4
 
       # 2. Adım: Android derlemesi için Java JDK 17'yi kurar.
+      # HATA DÜZELTMESİ: 'cache: "gradle"' satırı buradan kaldırıldı.
       - name: Java Kurulumu (JDK 17)
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "temurin"
-          cache: "gradle"
 
       # 3. Adım: Flutter SDK'sını kurar (versiyon 3.22.0).
       - name: Flutter Kurulumu (stable)
