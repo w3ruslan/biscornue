@@ -1,7 +1,25 @@
+name: surplace_pos
+description: Simple POS app
+publish_to: "none"
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"      # <-- ALT SINIR ŞART! (dart)
+  flutter: ">=3.22.0"        # flutter için makul alt sınır
+
 dependencies:
   flutter:
     sdk: flutter
+  # Yazıcı + ağ
   esc_pos_printer: ^4.0.4
   esc_pos_utils_plus: ^2.0.1+6
-  shared_preferences: ^2.2.2
   network_info_plus: ^4.1.0
+  # Ayarlar
+  shared_preferences: ^2.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
