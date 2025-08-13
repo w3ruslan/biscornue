@@ -1,37 +1,39 @@
 name: Android APK (arm64 release)
 
 on:
-  workflow_dispatch:        # Elle çalıştırmak için
+  workflow_dispatch:
   push:
-    branches: [ main ]      # İstersen, sadece elle tetiklemek için bunu silebilirsin
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
+      # 0) Kodu indir
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Flutter (stable 3.22.0)
+      # 1) Flutter kur
+      - name: Set up Flutter (stable)
         uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.22.0"
           channel: "stable"
           cache: true
 
-      # android klasörü yoksa oluştur
+      # 2) Android klasörü yoksa oluştur
       - name: Ensure Android platform exists
         shell: bash
         run: |
           if [ ! -f android/app/src/main/AndroidManifest.xml ]; then
-            echo "android/ not found; creating Android platform..."
+            echo "android/ not found; creating..."
             flutter create . --platforms=android
           else
             echo "android/ already exists."
           fi
 
-      # Gradle cache'i android oluştuktan sonra açıyoruz (önce açınca hata veriyordu)
+      # 3) Java 17 (Gradle/AGP için)
       - name: Set up Java (JDK 17)
         uses: actions/setup-java@v4
         with:
@@ -39,20 +41,7 @@ jobs:
           distribution: "temurin"
           cache: "gradle"
 
-      # (İsteğe bağlı ama önerilir) Release manifest'te INTERNET iznini garanti et
-      - name: Ensure INTERNET permission in release Manifest
-        shell: bash
-        run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
-            echo "Adding INTERNET permission to $MANIFEST"
-            sed -i '0,/<manifest[^>]*>/s//&\
-    <uses-permission android:name="android.permission.INTERNET" \/>/' "$MANIFEST"
-          fi
-          echo "Final manifest:"
-          cat "$MANIFEST"
-
-      # Ağ hataları olursa birkaç kez dene
+      # 4) Bağımlılıkları indir (ağ hatası varsa 5 kez dener)
       - name: Flutter pub get (retry)
         shell: bash
         run: |
@@ -62,17 +51,35 @@ jobs:
             sleep 10
           done
 
-      # ARM64 için release APK (ayrı abi)
-      - name: Build APK (arm64, release)
-        run: |
-          flutter build apk --release --split-per-abi --target-platform=android-arm64
+      # 5) Ortamı gör (teşhis için)
+      - name: Flutter doctor
+        run: flutter doctor -v
 
-      # APK'yı indirilebilir artifact olarak yükle
-      - name: Upload APK artifact
+      # 6) Önce DEBUG derle (hata varsa çabuk yakalar) ve ayrıntılı log üret
+      - name: Build debug APK (verbose)
+        run: flutter build apk --debug --verbose | tee debug_build.log
+
+      # 7) Debug başarısızsa direkt çıkmasın; log’u yükleyelim
+      - name: Upload debug logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-arm64-release
+          name: debug-logs
+          path: debug_build.log
+
+      # 8) Debug geçtiyse RELEASE derle (arm64 ayrı APK)
+      - name: Build release APK (arm64, verbose)
+        if: ${{ success() }}
+        run: flutter build apk --release --split-per-abi --target-platform=android-arm64 --verbose | tee release_build.log
+
+      # 9) APK ve logları yükle
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: outputs
           path: |
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/**/*.apk
+            release_build.log
+            debug_build.log
           if-no-files-found: warn
