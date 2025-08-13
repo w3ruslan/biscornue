@@ -1,32 +1,26 @@
 name: Android APK (arm64 release)
 
 on:
-  workflow_dispatch:   # Elle çalıştır
+  workflow_dispatch:        # Elle çalıştırmak için
   push:
-    branches: [ main ] # İstersen burayı silebilirsin; sadece elle çalıştırırsın
+    branches: [ main ]      # İstersen, sadece elle tetiklemek için bunu silebilirsin
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    env:
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx3g -Dfile.encoding=UTF-8"
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Flutter'ı kur
-      - name: Set up Flutter (stable)
+      - name: Set up Flutter (stable 3.22.0)
         uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.22.0"
           channel: "stable"
           cache: true
 
-      # android/ klasörü yoksa oluştur
+      # android klasörü yoksa oluştur
       - name: Ensure Android platform exists
         shell: bash
         run: |
@@ -37,7 +31,7 @@ jobs:
             echo "android/ already exists."
           fi
 
-      # Java'yı android klasörü oluştuktan sonra kur (gradle cache hatası olmasın)
+      # Gradle cache'i android oluştuktan sonra açıyoruz (önce açınca hata veriyordu)
       - name: Set up Java (JDK 17)
         uses: actions/setup-java@v4
         with:
@@ -45,22 +39,20 @@ jobs:
           distribution: "temurin"
           cache: "gradle"
 
-      # Gerekli Android SDK + build-tools + platformları yükle
-      - name: Install Android SDK components
+      # (İsteğe bağlı ama önerilir) Release manifest'te INTERNET iznini garanti et
+      - name: Ensure INTERNET permission in release Manifest
         shell: bash
         run: |
-          yes | ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager \
-            "platform-tools" \
-            "build-tools;34.0.0" \
-            "platforms;android-34" \
-            "cmdline-tools;latest"
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
+            echo "Adding INTERNET permission to $MANIFEST"
+            sed -i '0,/<manifest[^>]*>/s//&\
+    <uses-permission android:name="android.permission.INTERNET" \/>/' "$MANIFEST"
+          fi
+          echo "Final manifest:"
+          cat "$MANIFEST"
 
-      # Doktoru çalıştır (ortamı gör)
-      - name: Flutter doctor
-        run: flutter doctor -v
-
-      # Bağımlılıkları indir (ağ hatası olursa 5 kez dener)
+      # Ağ hataları olursa birkaç kez dene
       - name: Flutter pub get (retry)
         shell: bash
         run: |
@@ -70,15 +62,10 @@ jobs:
             sleep 10
           done
 
-      # İsteğe bağlı: static analiz (derlemeye girmeden önce Dart hatası var mı görelim)
-      - name: Flutter analyze
-        run: flutter analyze || true
-
-      # ARM64 için release APK üret (verbose: -v, shrink kapalı: --no-shrink)
-      - name: Build APK (arm64, release, verbose)
+      # ARM64 için release APK (ayrı abi)
+      - name: Build APK (arm64, release)
         run: |
-          flutter build apk -v --no-shrink --release \
-            --split-per-abi --target-platform=android-arm64
+          flutter build apk --release --split-per-abi --target-platform=android-arm64
 
       # APK'yı indirilebilir artifact olarak yükle
       - name: Upload APK artifact
