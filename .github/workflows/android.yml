@@ -8,92 +8,72 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Proje Dosyalarini Indir
+      - name: Proje dosyalarını indir
         uses: actions/checkout@v4
 
-      - name: Flutter Kurulumu
+      - name: Flutter kurulumu
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      - name: Set up JDK 17
+      - name: JDK 17 kur
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: zulu
           java-version: '17'
 
-      - name: Android Projesini Olustur
+      - name: Android projesini oluştur
         run: flutter create . --platforms=android --org com.w3ruslan --project-name surplace_pos --overwrite
 
-      # --- HERE-DOC YOK, printf ile yaziyoruz ---
-      - name: Gradle Adreslerini Garanti Altina Al (settings.gradle + build.gradle)
+      # ---- Gradle ayarlarını güvene al (HEREDOC ile) ----
+      - name: Gradle repo ve çözümleme ayarlarını yaz
         shell: bash
         run: |
           set -euo pipefail
 
-          mkdir -p android
+          # settings.gradle dosyasını baştan yaz
+          cat > android/settings.gradle <<'EOF'
+pluginManagement {
+  repositories {
+    google()
+    mavenCentral()
+    gradlePluginPortal()
+  }
+}
+dependencyResolutionManagement {
+  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+  repositories {
+    google()
+    mavenCentral()
+  }
+}
+rootProject.name = "surplace_pos"
+include(":app")
+EOF
 
-          # settings.gradle: pluginManagement + dependencyResolutionManagement
-          SETTINGS_FILE=android/settings.gradle
-          printf '%s\n' \
-'pluginManagement {' \
-'  repositories {' \
-'    google()' \
-'    mavenCentral()' \
-'    gradlePluginPortal()' \
-'  }' \
-'}' \
-'dependencyResolutionManagement {' \
-'  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)' \
-'  repositories {' \
-'    google()' \
-'    mavenCentral()' \
-'  }' \
-'}' \
-'rootProject.name = "surplace_pos"' \
-'include(":app")' \
-          > "$SETTINGS_FILE"
-
-          # project-level build.gradle: allprojects { repositories { ... } } yoksa ekle
-          if ! grep -q "allprojects" android/build.gradle; then
-            printf '%s\n' \
-'allprojects {' \
-'  repositories {' \
-'    google()' \
-'    mavenCentral()' \
-'  }' \
-'}' \
-            >> android/build.gradle
+          # android/build.gradle içine (yoksa) allprojects + repositories + resolutionStrategy ekle
+          if ! grep -q "allprojects[[:space:]]*{" android/build.gradle; then
+            cat >> android/build.gradle <<'EOF'
+allprojects {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  configurations.all {
+    resolutionStrategy {
+      // Kotlin tek sürüm zorla (duplicate class hatasını önler)
+      force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
+      force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'
+    }
+  }
+}
+EOF
           fi
 
-      - name: Kotlin Surumunu Hizala ve Tek Surumu Zorla
-        shell: bash
-        run: |
-          set -euo pipefail
-          FILE=android/build.gradle
-
-          # Eski şablonlarda varsa ext.kotlin_version'ı 1.9.24'e çek
-          if grep -q "ext.kotlin_version" "$FILE"; then
-            sed -i "s/ext.kotlin_version *= *'.*'/ext.kotlin_version = '1.9.24'/" "$FILE"
-          fi
-
-          # resolutionStrategy yoksa ekle (tek stdlib sürümü)
-          if ! grep -q "resolutionStrategy" "$FILE"; then
-            printf '%s\n' \
-'allprojects {' \
-'  configurations.all {' \
-'    resolutionStrategy {' \
-"      force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'" \
-"      force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'" \
-'    }' \
-'  }' \
-'}' \
-            >> "$FILE"
-          fi
-
-      - name: INTERNET Iznini Ekle
+      - name: AndroidManifest’e INTERNET izni ekle
         shell: bash
         run: |
           set -euo pipefail
@@ -101,13 +81,13 @@ jobs:
           sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET" />\
     <application#' "$MANIFEST"
 
-      - name: Bagimliliklari Yukle
+      - name: Bağımlılıkları indir
         run: flutter pub get
 
-      - name: APK Olustur (arm64 debug)
+      - name: APK oluştur (arm64 debug)
         run: flutter build apk --debug --target-platform=android-arm64 --no-shrink
 
-      - name: APK Dosyasini Yukle
+      - name: APK’yi artefact olarak yükle
         uses: actions/upload-artifact@v4
         with:
           name: apk-debug
