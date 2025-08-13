@@ -21,26 +21,60 @@ jobs:
       - name: Android Projesini Olustur
         run: flutter create . --platforms=android --org com.w3ruslan --project-name surplace_pos --overwrite
 
-      # --- SİZİN TALİMATINIZLA EKLENEN DÜZELTMELER ---
-      - name: Kotlin Surumunu Hizala
+      # --- SİZİN TALİMATINIZLA EKLENEN YENİ DÜZELTMELER ---
+      - name: Gradle Adreslerini Garanti Altina Al (settings.gradle + build.gradle)
         run: |
-          FILE=android/build.gradle
-          if grep -q "ext.kotlin_version" "$FILE"; then
-            sed -i "s/ext.kotlin_version *= *'.*'/ext.kotlin_version = '1.8.10'/" "$FILE"
-          fi
-          
-      - name: Tek Kotlin Stdlib Surumunu Zorla
-        run: |
-          cat >> android/build.gradle <<'EOF'
-          allprojects {
-            configurations.all {
-              resolutionStrategy {
-                force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.10'
-                force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.10'
-              }
+          # settings.gradle: pluginManagement + dependencyResolutionManagement
+          cat > android/settings.gradle <<'EOF'
+          pluginManagement {
+            repositories {
+              google()
+              mavenCentral()
+              gradlePluginPortal()
             }
           }
+          dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+              google()
+              mavenCentral()
+            }
+          }
+          rootProject.name = "surplace_pos"
+          include(":app")
           EOF
+          # project-level build.gradle: allprojects { repositories { ... } }
+          if ! grep -q "allprojects" android/build.gradle; then
+            cat >> android/build.gradle <<'EOF'
+            allprojects {
+              repositories {
+                google()
+                mavenCentral()
+              }
+            }
+            EOF
+          fi
+          
+      - name: Kotlin Surumunu Hizala ve Tek Surumu Zorla
+        run: |
+          FILE=android/build.gradle
+          # Eski şablonlarda varsa ext.kotlin_version'ı güncelle
+          if grep -q "ext.kotlin_version" "$FILE"; then
+            sed -i "s/ext.kotlin_version *= *'.*'/ext.kotlin_version = '1.9.24'/" "$FILE"
+          fi
+          # Bütün modüllerde aynı stdlib sürümünü zorla (duplicate class'ı engeller)
+          if ! grep -q "resolutionStrategy" "$FILE"; then
+            cat >> android/build.gradle <<'EOF'
+            allprojects {
+              configurations.all {
+                resolutionStrategy {
+                  force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
+                  force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'
+                }
+              }
+            }
+            EOF
+          fi
       # --- DÜZELTMELERİN SONU ---
 
       - name: INTERNET Iznini Ekle
