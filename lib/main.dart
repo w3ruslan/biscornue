@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
-// UYUMLU PAKETLER İÇİN DOĞRU IMPORT SATIRLARI
+// UYUMLU PAKETLER İÇİN SADECE DOĞRU IMPORT SATIRLARI
 import 'package:esc_pos_printer_plus/esc_pos_printer_plus.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils.dart' as esc;
 
