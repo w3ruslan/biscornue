@@ -9,11 +9,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  shared_preferences: ^2.2.2
 
-  # Yalnızca PLUS sürüm (diğerini kesinlikle eklemiyoruz)
+  # Yazıcı için sadece PLUS sürümü (eskisini asla ekleme!)
   esc_pos_utils_plus: ^2.0.1+6
-  ping_discover_network: ^2.0.0
+
+  # Ayarlar/IP saklamak için
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:
