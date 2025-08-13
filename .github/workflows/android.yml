@@ -8,84 +8,80 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Proje dosyalarını indir
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Flutter kurulumu
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Flutter (stable)
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      - name: JDK 17 kur
-        uses: actions/setup-java@v4
-        with:
-          distribution: zulu
-          java-version: '17'
-
-      - name: Android projesini oluştur
+      # Projeyi android için oluştur (varsa üstüne yazar)
+      - name: Flutter create (android)
         run: flutter create . --platforms=android --org com.w3ruslan --project-name surplace_pos --overwrite
 
-      # ---- Gradle ayarlarını güvene al (HEREDOC ile) ----
-      - name: Gradle repo ve çözümleme ayarlarını yaz
-        shell: bash
-        run: |
-          set -euo pipefail
-          # settings.gradle dosyasını baştan yaz
-          cat > android/settings.gradle <<'EOF'
-          pluginManagement {
-            repositories {
-              google()
-              mavenCentral()
-              gradlePluginPortal()
-            }
-          }
-          dependencyResolutionManagement {
-            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-            repositories {
-              google()
-              mavenCentral()
-            }
-          }
-          rootProject.name = "surplace_pos"
-          include(":app")
-          EOF
-          # android/build.gradle içine (yoksa) allprojects + repositories + resolutionStrategy ekle
-          if ! grep -q "allprojects[[:space:]]*{" android/build.gradle; then
-            cat >> android/build.gradle <<'EOF'
-          allprojects {
-            repositories {
-              google()
-              mavenCentral()
-            }
-            configurations.all {
-              resolutionStrategy {
-                // Kotlin tek sürüm zorla (duplicate class hatasını önler)
-                force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
-                force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'
-              }
-            }
-          }
-          EOF
-          fi
-
-      - name: AndroidManifest’e INTERNET izni ekle
-        shell: bash
-        run: |
-          set -euo pipefail
-          MANIFEST=android/app/src/main/AndroidManifest.xml
-          sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET" />\
-              <application#' "$MANIFEST"
-
-      - name: Bağımlılıkları indir
+      # Bağımlılıkları indir
+      - name: flutter pub get
         run: flutter pub get
 
-      - name: APK oluştur (arm64 debug)
-        run: flutter build apk --debug --target-platform=android-arm64 --no-shrink
+      # Teşhis: Flutter/Android/Gradle ortamını yaz
+      - name: Show versions (doctor)
+        run: |
+          flutter --version
+          flutter doctor -v
+          echo "JAVA_HOME=$JAVA_HOME"
+          java -version
+          if [ -f android/gradle/wrapper/gradle-wrapper.properties ]; then
+            echo "---- gradle-wrapper.properties ----"
+            cat android/gradle/wrapper/gradle-wrapper.properties
+          fi
+          if [ -f android/build.gradle ]; then
+            echo "---- android/build.gradle ----"
+            sed -n '1,200p' android/build.gradle
+          fi
+          if [ -f android/app/build.gradle ]; then
+            echo "---- android/app/build.gradle ----"
+            sed -n '1,240p' android/app/build.gradle
+          fi
+          if [ -f android/settings.gradle ]; then
+            echo "---- android/settings.gradle ----"
+            sed -n '1,200p' android/settings.gradle
+          fi
+          if [ -f android/app/src/main/AndroidManifest.xml ]; then
+            echo "---- AndroidManifest.xml ----"
+            sed -n '1,200p' android/app/src/main/AndroidManifest.xml
+          fi
+          
+      # Teşhis: Gradle görevleri ve bağımlılıklar
+      - name: Gradle tasks / dependencies (diagnostic)
+        working-directory: android
+        run: |
+          ./gradlew -v
+          ./gradlew :app:dependencies --configuration debugRuntimeClasspath --no-daemon --info || true
+          ./gradlew :app:tasks --no-daemon --all || true
+          
+      # Derlemeyi AYRINTILI yap (verbose + stacktrace)
+      - name: Build APK (verbose)
+        run: |
+          flutter build apk \
+            --debug \
+            --target-platform=android-arm64 \
+            --no-shrink \
+            --verbose
+        env:
+          # Gerekiyorsa Gradle’ı daha konuşkan yap
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx3g -Dfile.encoding=UTF-8' -Dorg.gradle.logging.level=info"
 
-      - name: APK’yi artefact olarak yükle
+      - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: apk-debug
