@@ -1,70 +1,81 @@
-name: Android APK (arm64 release)
+# İş akışının adı: GitHub "Actions" sekmesinde bu isimle görünecek.
+name: Android APK Olustur (arm64 Release)
 
+# İş akışının tetiklenme koşulları:
 on:
+  # Manuel olarak "Run workflow" butonuyla tetiklenebilir.
   workflow_dispatch:
+  # 'main' branch'ine her kod gönderildiğinde (push) otomatik olarak çalışır.
   push:
     branches: [ main ]
 
 jobs:
   build:
+    # Derlemenin yapılacağı sanal makine.
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      # 1. Adım: Proje kodlarını sanal makineye indirir.
+      - name: Proje Dosyalarini Indir
         uses: actions/checkout@v4
 
-      - name: Set up Java (JDK 17)
+      # 2. Adım: Android derlemesi için Java JDK 17'yi kurar.
+      - name: Java Kurulumu (JDK 17)
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "temurin"
           cache: "gradle"
 
-      - name: Set up Flutter (stable)
+      # 3. Adım: Flutter SDK'sını kurar (versiyon 3.22.0).
+      - name: Flutter Kurulumu (stable)
         uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.22.0"
           channel: "stable"
           cache: true
 
-      - name: Ensure Android platform exists
+      # 4. Adım: 'android' klasörünün varlığını kontrol eder, yoksa oluşturur.
+      - name: Android Platformunun Varligini Kontrol Et
         shell: bash
         run: |
           if [ ! -f android/app/src/main/AndroidManifest.xml ]; then
-            echo "android/ not found; creating Android platform..."
+            echo "android/ klasoru bulunamadi; platform olusturuluyor..."
             flutter create . --platforms=android
           else
-            echo "android/ already exists."
+            echo "android/ klasoru zaten mevcut."
           fi
 
-      - name: Enable INTERNET permission
+      # 5. Adım: İnternet iznini AndroidManifest.xml dosyasına ekler.
+      - name: INTERNET Iznini Ekle
         shell: bash
         run: |
           MANIFEST=android/app/src/main/AndroidManifest.xml
           if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
             sed -i '0,/<application/ s//<uses-permission android:name="android.permission.INTERNET" \/>\n    <application/' "$MANIFEST"
           fi
-          echo "---- AndroidManifest.xml ----"
+          echo "---- AndroidManifest.xml Icerigi ----"
           cat $MANIFEST
 
-      - name: Flutter pub get (retry)
+      # 6. Adım: Proje bağımlılıklarını yükler (5 kez deneme ile).
+      - name: Bagimliliklari Yukle (flutter pub get)
         shell: bash
         run: |
           for i in {1..5}; do
             flutter pub get && break
-            echo "Retrying flutter pub get ($i/5)..."
+            echo "flutter pub get tekrar deneniyor ($i/5)..."
             sleep 10
           done
 
-      - name: Build APK (arm64 release)
+      # 7. Adım: Sadece 64-bit ARM mimarisi için APK oluşturur.
+      - name: APK Olustur (arm64 release)
         run: |
           flutter build apk --release --split-per-abi --target-platform=android-arm64
 
-      - name: Upload APK artifact
+      # 8. Adım: Oluşturulan APK dosyasını "artifact" olarak kaydeder.
+      - name: APK Dosyasini Yukle
         uses: actions/upload-artifact@v4
         with:
           name: app-arm64-release
-          path: |
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           if-no-files-found: warn
