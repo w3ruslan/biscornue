@@ -10,12 +10,12 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # DOĞRU VE UYUMLU YAZICI PAKETİ
+  # DOĞRU VE UYUMLU YAZICI PAKETLERİ
   esc_pos_printer_plus: ^0.0.3
+  esc_pos_utils_plus: ^2.0.1+6
 
   network_info_plus: ^5.0.3 
   shared_preferences: ^2.2.2
-  esc_pos_utils_plus: ^2.0.1+6
   path_provider: ^2.1.3
   share_plus: ^7.2.1
   cupertino_icons: ^1.0.6
