@@ -26,10 +26,16 @@ jobs:
           channel: "stable"
           cache: true
       
-      # ÖNEMLİ ADIM: Proje önbelleğini temizler. Bu, eski paket hatalarını çözer.
+      # 1. GÜVENLİK ADIMI: Proje önbelleğini temizler.
       - name: Projeyi Temizle
         run: flutter clean
 
+      # 2. GÜVENLİK ADIMI: main.dart dosyasındaki olası import hatasını otomatik düzeltir.
+      - name: main.dart Dosyasindaki Import Hatasini Duzelt
+        run: |
+          sed -i 's|package:esc_pos_printer/esc_pos_printer.dart|package:esc_pos_printer_plus/esc_pos_printer_plus.dart|g' lib/main.dart
+          echo "---- main.dart dosyasindaki importlar duzeltildi ----"
+      
       - name: Android Platformunun Varligini Kontrol Et
         shell: bash
         run: |
