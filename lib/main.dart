@@ -269,6 +269,9 @@ class _HomeState extends State<Home> {
         ],
         onDestinationSelected: (i) async {
           if (i == 1) { final ok = await _askPin(context); if (!ok) return; }
+          if (i == 2) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          }
           setState(() => index = i);
         },
       ),
@@ -805,6 +808,7 @@ class _OrderWizardState extends State<OrderWizard> {
   }
 }
 
+// --- YENİ DÜZENLEME: SEÇENEKLER İÇİN IZGARA GÖRÜNÜMÜ ---
 class _GroupStep extends StatelessWidget {
   final OptionGroup group;
   final Map<String, List<OptionItem>> picked;
@@ -812,59 +816,112 @@ class _GroupStep extends StatelessWidget {
   final void Function(OptionGroup, OptionItem) toggleMulti;
 
   const _GroupStep({
-    required this.group, required this.picked,
-    required this.toggleSingle, required this.toggleMulti,
+    required this.group,
+    required this.picked,
+    required this.toggleSingle,
+    required this.toggleMulti,
   });
 
   @override
   Widget build(BuildContext context) {
-    final list = picked[group.id] ?? const [];
-    final color = Theme.of(context).colorScheme;
+    final selectedList = picked[group.id] ?? const <OptionItem>[];
+    final cs = Theme.of(context).colorScheme;
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(12),
-      itemCount: group.items.length + 1,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (_, i) {
-        if (i == 0) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Text(
-              group.title + (group.multiple ? ' (min ${group.minSelect}, max ${group.maxSelect})' : ''),
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          );
-        }
-        final it = group.items[i - 1];
-        final selected = list.any((e) => e.id == it.id);
+    // Ekran genişliğine göre 2–5 arası sütun; üst sınır 5
+    final w = MediaQuery.of(context).size.width;
+    final cols = (w ~/ 180).clamp(2, 5); // 180px civarı kutu genişliği
 
-        return InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => group.multiple ? toggleMulti(group, it) : toggleSingle(group, it),
-          child: Ink(
-            decoration: BoxDecoration(
-              color: selected ? color.primaryContainer : color.surfaceVariant,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: selected ? color.primary : color.outlineVariant),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-              child: Row(children: [
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(it.label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                    if (it.price != 0)
-                      Text('+ €${it.price.toStringAsFixed(2)}', style: TextStyle(color: color.onSurfaceVariant)),
-                  ]),
-                ),
-                group.multiple
-                    ? Checkbox(value: selected, onChanged: (_) => toggleMulti(group, it))
-                    : Radio<bool>(value: true, groupValue: selected, onChanged: (_) => toggleSingle(group, it)),
-              ]),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          child: Text(
+            group.title +
+                (group.multiple
+                    ? '  (min ${group.minSelect}, max ${group.maxSelect})'
+                    : ''),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: cols,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              // kartların yatay uzun görünmesi için
+              childAspectRatio: 2.2,
+            ),
+            itemCount: group.items.length,
+            itemBuilder: (_, i) {
+              final it = group.items[i];
+              final isSelected = selectedList.any((e) => e.id == it.id);
+
+              void onTap() => group.multiple
+                  ? toggleMulti(group, it)
+                  : toggleSingle(group, it);
+
+              return InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(18),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    color: isSelected
+                        ? cs.primaryContainer
+                        : cs.surfaceVariant,
+                    border: Border.all(
+                      color: isSelected ? cs.primary : cs.outlineVariant,
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Stack(
+                    children: [
+                      Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              it.label,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (it.price != 0)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  '+ ${it.price.toStringAsFixed(2)} €',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (isSelected)
+                        Positioned(
+                          right: 8,
+                          top: 8,
+                          child: Icon(Icons.check_circle,
+                              size: 18, color: cs.primary),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1244,21 +1301,29 @@ Future<String?> _askCustomerName(BuildContext context) async {
   );
 }
 
-void _snack(BuildContext context, String msg) {
+// --- DÜZELTME: GELİŞMİŞ SNACKBAR YARDIMCISI ---
+void _snack(BuildContext context, String msg, {int ms = 1200}) {
   if (!context.mounted) return;
+  final bottomInset = MediaQuery.of(context).padding.bottom;
+  final bottomBar = kBottomNavigationBarHeight; // alt nav yüksekliği (NavigationBar)
+  final bottomMargin = 12 + bottomInset + bottomBar;
+
   ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(msg)));
+    ..hideCurrentSnackBar() // varsa önceki uyarıyı kapat
+    ..showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        duration: Duration(milliseconds: ms),  // kısa tutuyoruz
+        behavior: SnackBarBehavior.floating,  // yapışık değil, “floating”
+        margin: EdgeInsets.fromLTRB(12, 0, 12, bottomMargin),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        dismissDirection: DismissDirection.horizontal,
+      ),
+    );
 }
 
 void _showWarn(BuildContext context, String msg) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(msg),
-      duration: const Duration(milliseconds: 1200),
-      behavior: SnackBarBehavior.floating,
-      margin: const EdgeInsets.only(bottom: 72, left: 12, right: 12),
-    ),
-  );
+  _snack(context, msg);
 }
 
 /* =======================
@@ -1284,7 +1349,6 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 // YENİ, PAKETSİZ YAZDIRMA YARDIMCILARI
 // ==================================================
 
-// 2 haneli sıfır doldurma: 5 -> "05"
 String _two(int n) => n.toString().padLeft(2, '0');
 
 String _money(double v) =>
