@@ -172,7 +172,6 @@ class _HomeState extends State<Home> {
     _seeded = true;
 
     final app = AppScope.of(context);
-    // --- YENİ DÜZENLEME: GERÇEK MENÜ BURAYA EKLENDİ ---
     if (app.products.isEmpty) {
       final products = <Product>[
         // 1) SANDWICH
@@ -194,13 +193,19 @@ class _HomeState extends State<Home> {
               OptionItem(id: 'galette', label: 'Galette',   price: 0.00),
             ],
           ),
+          // --- YENİ DÜZENLEME: CRUDITES GRUBU GÜNCELLENDİ ---
           OptionGroup(
-            id: 'crudites', title: 'Crudites', multiple: true, minSelect: 0, maxSelect: 3,
+            id: 'crudites',
+            title: 'Crudites / Retirer (max 4)',
+            multiple: true,
+            minSelect: 0,
+            maxSelect: 4,
             items: [
-              OptionItem(id: 'sans_tomates',    label: 'Sans tomates',    price: 0.00),
-              OptionItem(id: 'sans_salade',     label: 'Sans salade',     price: 0.00),
-              OptionItem(id: 'sans_oignons',    label: 'Sans oignons',    price: 0.00),
-              OptionItem(id: 'sans_cornichons', label: 'Sans cornichons', price: 0.00),
+              OptionItem(id: 'sans_crudites', label: 'Sans crudites', price: 0),
+              OptionItem(id: 'sans_tomates', label: 'Sans tomates', price: 0),
+              OptionItem(id: 'sans_salade', label: 'Sans salade', price: 0),
+              OptionItem(id: 'sans_oignons', label: 'Sans oignons', price: 0),
+              OptionItem(id: 'sans_cornichons', label: 'Sans cornichons', price: 0),
             ],
           ),
           OptionGroup(
@@ -356,7 +361,6 @@ class _HomeState extends State<Home> {
               OptionItem(id: 'nuggets_menu', label: '5 Nuggets et frites',      price: 7.90),
             ],
           ),
-          // CRUDITES sadece cheeseburger secilirse gosterilecek
           OptionGroup(
             id: 'crudites_enfant', title: 'Crudites', multiple: true, minSelect: 0, maxSelect: 3,
             items: [
@@ -414,7 +418,6 @@ class _HomeState extends State<Home> {
 
       app.products.addAll(products);
     }
-    // --- YENİ DÜZENLEME SONU ---
   }
 
   @override
@@ -924,7 +927,6 @@ class _OrderWizardState extends State<OrderWizard> {
     }
   }
 
-  // --- YENİ: MENU ENFANT İÇİN KOŞULLU GRUP GÖSTERİMİ ---
   List<OptionGroup> _groupsForVisibility(List<OptionGroup> base) {
     if (widget.product.name != 'Menu Enfant') return base;
 
@@ -938,14 +940,35 @@ class _OrderWizardState extends State<OrderWizard> {
     }).toList();
   }
 
-  void _toggleSingle(OptionGroup g, OptionItem it) { picked[g.id] = [it]; setState(() {}); }
+  // --- YENİ DÜZENLEME: AKILLI ÇOKLU SEÇİM ---
   void _toggleMulti(OptionGroup g, OptionItem it) {
-    final list = picked[g.id] ?? [];
+    final list = List<OptionItem>.from(picked[g.id] ?? []);
+    final isCrud = g.id == 'crudites';
+    final isSansCrud = it.id == 'sans_crudites';
+
+    if (isCrud && isSansCrud) {
+      picked[g.id] = [it];
+      setState(() {});
+      return;
+    }
+
     final exists = list.any((e) => e.id == it.id);
-    if (exists) { list.removeWhere((e) => e.id == it.id); }
-    else { if (list.length >= g.maxSelect) return; list.add(it); }
-    picked[g.id] = list; setState(() {});
+    if (exists) {
+      list.removeWhere((e) => e.id == it.id);
+    } else {
+      if (isCrud) {
+        list.removeWhere((e) => e.id == 'sans_crudites');
+      }
+      if (list.length >= g.maxSelect) return;
+      list.add(it);
+    }
+
+    picked[g.id] = list;
+    setState(() {});
   }
+
+  void _toggleSingle(OptionGroup g, OptionItem it) { picked[g.id] = [it]; setState(() {}); }
+  
   bool _validGroup(OptionGroup g) {
     final n = (picked[g.id] ?? const []).length;
     return n >= g.minSelect && n <= g.maxSelect;
@@ -1054,6 +1077,9 @@ class _GroupStep extends StatelessWidget {
     int cross = (size.width / desired).floor().clamp(2, 5);
 
     final selectedList = picked[group.id] ?? const <OptionItem>[];
+    // --- YENİ DÜZENLEME: PASİF GÖSTERME MANTIĞI ---
+    final sansCrudOn = group.id == 'crudites'
+        && selectedList.any((e) => e.id == 'sans_crudites');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1081,6 +1107,7 @@ class _GroupStep extends StatelessWidget {
             itemBuilder: (_, i) {
               final it = group.items[i];
               final isSelected = selectedList.any((e) => e.id == it.id);
+              final disabled = sansCrudOn && it.id != 'sans_crudites';
 
               void onTap() {
                 if (group.multiple) {
@@ -1092,75 +1119,78 @@ class _GroupStep extends StatelessWidget {
 
               return InkWell(
                 borderRadius: BorderRadius.circular(16),
-                onTap: onTap,
-                child: Ink(
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? color.primaryContainer
-                        : color.surfaceVariant,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isSelected ? color.primary : color.outlineVariant,
-                      width: isSelected ? 2 : 1,
-                    ),
-                  ),
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: group.multiple
-                            ? Icon(
-                                isSelected
-                                    ? Icons.check_box
-                                    : Icons.check_box_outline_blank,
-                                size: 22,
-                                color: isSelected
-                                    ? color.primary
-                                    : color.onSurfaceVariant,
-                              )
-                            : Icon(
-                                isSelected
-                                    ? Icons.radio_button_checked
-                                    : Icons.radio_button_unchecked,
-                                size: 22,
-                                color: isSelected
-                                    ? color.primary
-                                    : color.onSurfaceVariant,
-                              ),
+                onTap: disabled ? null : onTap,
+                child: Opacity(
+                  opacity: disabled ? 0.35 : 1.0,
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? color.primaryContainer
+                          : color.surfaceVariant,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected ? color.primary : color.outlineVariant,
+                        width: isSelected ? 2 : 1,
                       ),
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 8),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                it.label,
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
+                    ),
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: group.multiple
+                              ? Icon(
+                                  isSelected
+                                      ? Icons.check_box
+                                      : Icons.check_box_outline_blank,
+                                  size: 22,
+                                  color: isSelected
+                                      ? color.primary
+                                      : color.onSurfaceVariant,
+                                )
+                              : Icon(
+                                  isSelected
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_unchecked,
+                                  size: 22,
+                                  color: isSelected
+                                      ? color.primary
+                                      : color.onSurfaceVariant,
                                 ),
-                              ),
-                              const SizedBox(height: 6),
-                              if (it.price != 0)
+                        ),
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 8),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
                                 Text(
-                                  '+ ${_formatEuro(it.price)}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: color.onSurfaceVariant,
-                                  ),
+                                  it.label,
                                   textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                            ],
+                                const SizedBox(height: 6),
+                                if (it.price != 0)
+                                  Text(
+                                    '+ ${_formatEuro(it.price)}',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: color.onSurfaceVariant,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               );
