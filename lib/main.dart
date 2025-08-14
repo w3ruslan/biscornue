@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:convert';
+import 'dart.convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
@@ -301,6 +301,7 @@ class ProductsPage extends StatelessWidget {
     int cross = 2;
     if (width > 600) cross = 3;
     if (width > 900) cross = 4;
+    final aspect = width < 500 ? 0.88 : 1.0;
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -308,7 +309,7 @@ class ProductsPage extends StatelessWidget {
         crossAxisCount: cross,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 0.9, // Önce 1.0’dı
+        childAspectRatio: aspect,
       ),
       itemCount: products.length,
       itemBuilder: (_, i) => _ProductCard(product: products[i]),
@@ -316,7 +317,6 @@ class ProductsPage extends StatelessWidget {
   }
 }
 
-// --- YENİ DÜZENLEME: YUVARLAK KART TASARIMI ---
 class _ProductCard extends StatelessWidget {
   final Product product;
   const _ProductCard({super.key, required this.product});
@@ -327,70 +327,63 @@ class _ProductCard extends StatelessWidget {
 
     Future<void> openWizard() async {
       final added = await Navigator.push<bool>(
-        context,
-        MaterialPageRoute(builder: (_) => OrderWizard(product: product)),
+        context, MaterialPageRoute(builder: (_) => OrderWizard(product: product)),
       );
       if (added == true && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ajouté au panier.')),
-        );
+        _snack(context, 'Ajouté au panier.');
       }
     }
 
-    // Karta uzun basınca düzenleme (PIN sorar)
-    Future<void> editProduct() async {
-      final ok = await _askPin(context);
-      if (!ok) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => CreateProductPage(
-            onGoToTab: (_) {},
-            editIndex: AppScope.of(context).products.indexOf(product),
-          ),
-        ),
-      );
-    }
-
     return InkWell(
-      // yuvarlak kartta ripple için
-      customBorder: const CircleBorder(),
+      borderRadius: BorderRadius.circular(24),
       onTap: openWizard,
-      onLongPress: editProduct, // kalem yerine uzun bas
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // *** TAM YUVARLAK KART ***
-          Material(
-            color: color.surfaceVariant,
-            shape: const CircleBorder(),
-            elevation: 0,
-            child: SizedBox(
-              width: 140,
-              height: 140,
-              child: Center(
-                child: Icon(Icons.fastfood_rounded,
-                    color: color.primary, size: 48),
-              ),
+      child: Ink(
+        decoration: BoxDecoration(color: color.surfaceVariant, borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Container(
+              height: 56, width: 56,
+              decoration: BoxDecoration(color: color.primary.withOpacity(0.15), borderRadius: BorderRadius.circular(16)),
+              child: Icon(Icons.fastfood_rounded, color: color.primary, size: 32),
             ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            product.name,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${product.groups.length} groupe(s)',
-            style: TextStyle(color: color.onSurfaceVariant),
-          ),
-        ],
+            const SizedBox(height: 16),
+            Text(
+              product.name,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const Spacer(),
+            const SizedBox(height: 6), 
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                choisirButton(() => openWizard(), context),
+                IconButton(
+                  tooltip: 'Modifier',
+                  onPressed: () async {
+                    final ok = await _askPin(context);
+                    if (!ok) return;
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CreateProductPage(
+                          onGoToTab: (_) {},
+                          editIndex: AppScope.of(context).products.indexOf(product),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.edit_outlined),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+          ]),
+        ),
       ),
     );
   }
 }
-// --- YENİ DÜZENLEME SONU ---
-
 
 /* =======================
     PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
@@ -798,7 +791,7 @@ class _OrderWizardState extends State<OrderWizard> {
                 }
                 final g = groups[step];
                 if (!_validGroup(g)) {
-                  _showWarn(context, 'Sélection invalide pour "${g.title}".');
+                  _snack(context, 'Sélection invalide pour "${g.title}".');
                   return;
                 }
                 setState(() => step++);
@@ -988,9 +981,7 @@ class CartPage extends StatelessWidget {
                         if (result != null) {
                           app.updateCartLineAt(i, result);
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Satır güncellendi.')),
-                            );
+                            _snack(context, 'Satır güncellendi.');
                           }
                         }
                       },
@@ -1022,9 +1013,7 @@ class CartPage extends StatelessWidget {
               if (name == null) return;
               AppScope.of(context).finalizeCartToOrder(customer: name);
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Commande validée pour "$name".')),
-                );
+                _snack(context, 'Commande validée pour "$name".');
               }
             },
             icon: const Icon(Icons.check),
@@ -1106,17 +1095,9 @@ class OrdersPage extends StatelessWidget {
                   onPressed: () async {
                     try {
                       await printOrderAndroid(o);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Fiş yazıcıya gönderildi.')),
-                        );
-                      }
+                      _snack(context, 'Fiş yazıcıya gönderildi.');
                     } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Yazdırma hatası: $e')),
-                        );
-                      }
+                      _snack(context, 'Yazdırma hatası: $e');
                     }
                   },
                   tooltip: 'Imprimer',
@@ -1170,16 +1151,10 @@ class OrdersPage extends StatelessWidget {
                               await printOrderAndroid(o);
                               if (context.mounted) {
                                 Navigator.pop(context); // Diyalogu kapat
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Fiş yazıcıya gönderildi.')),
-                                );
+                                _snack(context, 'Fiş yazıcıya gönderildi.');
                               }
                             } catch (e) {
-                               if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Yazdırma hatası: $e')),
-                                );
-                              }
+                               _snack(context, 'Yazdırma hatası: $e');
                             }
                           },
                           child: const Text('Imprimer'),
@@ -1217,7 +1192,9 @@ Future<bool> _askPin(BuildContext context) async {
       ],
     ),
   );
-  if (ok != true && context.mounted) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code incorrect.'))); }
+  if (ok != true) {
+    _snack(context, 'Code incorrect.');
+  }
   return ok == true;
 }
 
@@ -1267,19 +1244,28 @@ Future<String?> _askCustomerName(BuildContext context) async {
   );
 }
 
-void _snack(BuildContext ctx, String msg) {
-  if (ctx.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
+// --- DÜZELTME: TEK VE DOĞRU SNACKBAR YARDIMCISI ---
+void _snack(BuildContext context, String msg) {
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text(msg)));
 }
 
-void _showWarn(BuildContext context, String msg) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(msg),
-      duration: const Duration(milliseconds: 1200),
-      behavior: SnackBarBehavior.floating,
-      margin: const EdgeInsets.only(bottom: 72, left: 12, right: 12),
+/* =======================
+    Choisir butonu (kırılma yok)
+    ======================= */
+Widget choisirButton(VoidCallback onTap, BuildContext context) {
+  final color = Theme.of(context).colorScheme;
+  return Material(
+    color: color.primary,
+    shape: const CircleBorder(),
+    child: InkWell(
+      customBorder: const CircleBorder(),
+      onTap: onTap,
+      child: const SizedBox(
+        height: 48, width: 48,
+        child: Icon(Icons.shopping_cart_outlined, color: Colors.white),
+      ),
     ),
   );
 }
@@ -1288,9 +1274,10 @@ void _showWarn(BuildContext context, String msg) {
 // YENİ, PAKETSİZ YAZDIRMA YARDIMCILARI
 // ==================================================
 
-String _two(int n) => n.toString().padLeft(2, '0');
+const int _COLS = 32;
 
-String _money(double v) => '€${v.toStringAsFixed(2)}';
+String _money(double v) =>
+    '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
 
 String _rightLine(String left, String right, {int width = 32}) {
   left = left.replaceAll('\n', ' ');
