@@ -1221,24 +1221,17 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 String _two(int n) => n.toString().padLeft(2, '0');
 
 String _sanitize(String s) {
-  const map = {
-    // TR/FR harfleri:
+  // ESC/POS çoğunlukla ASCII; TR/FR karakterleri sadeleştir
+  final Map<String, String> map = {
     'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
     'ş':'s','Ş':'S','ü':'u','Ü':'U',
-    'é':'e','è':'e','ê':'e','ë':'e','É':'E','È':'E','Ê':'E',
-    'á':'a','à':'a','â':'a','ä':'a','Á':'A','À':'A','Â':'A','Ä':'A',
-    'ô':'o','ò':'o','ó':'o','Ö':'O','Ó':'O','Ò':'O','Ô':'O',
-    'ù':'u','ú':'u','û':'u','Ü':'U','Û':'U','Ú':'U','Ù':'U',
-    'œ':'oe','Œ':'OE','æ':'ae','Æ':'AE',
-
-    // Semboller / tipografik işaretler:
+    'é':'e','è':'e','ê':'e',
+    'á':'a','à':'a','â':'a',
+    'ô':'o','ù':'u',
     '€':' EUR ',
-    '•':'-',
-    '–':'-','—':'-',
-    '’':"'", '‘':"'", '“':'"', '”':'"',
-    '\r':'', '\t':' ',
+    '–':'-','—':'-','…':'...',
+    '•':'*', // madde işareti hatasını da önler
   };
-
   final b = StringBuffer();
   for (final r in s.runes) {
     final ch = String.fromCharCode(r);
