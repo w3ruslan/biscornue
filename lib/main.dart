@@ -282,7 +282,6 @@ class _HomeState extends State<Home> {
 /* =======================
     PAGE 1 : PRODUITS
     ======================= */
-// --- DÜZELTME 1: KART ORANI GÜNCELLENDİ ---
 class ProductsPage extends StatelessWidget {
   const ProductsPage({super.key});
 
@@ -313,16 +312,15 @@ class ProductsPage extends StatelessWidget {
         crossAxisCount: cross,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: tileRatio, // <- ÖNEMLİ: daha büyük oran = daha alçak kart
+        childAspectRatio: tileRatio,
       ),
       itemCount: products.length,
       itemBuilder: (_, i) => _ProductCard(product: products[i]),
     );
   }
 }
-// --- DÜZELTME 1 SONU ---
 
-// --- DÜZELTME 2: KART TASARIMI GÜNCELLENDİ ---
+// --- DÜZELTME: KART TASARIMI GÜNCELLENDİ (KOMPAKT) ---
 class _ProductCard extends StatelessWidget {
   final Product product;
   const _ProductCard({super.key, required this.product});
@@ -350,37 +348,41 @@ class _ProductCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(12), // 16 → 12
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                height: 48,  // 56 → 48
-                width: 48,   // 56 → 48
-                decoration: BoxDecoration(
-                  color: color.primary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(14), // 16 → 14
-                ),
-                child: Icon(Icons.fastfood_rounded, color: color.primary, size: 28), // 32 → 28
-              ),
-              const SizedBox(height: 12), // 16 → 12
-              Text(
-                product.name,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600), // 18 → 16
-              ),
-              const SizedBox(height: 6), // 8 → 6
-              Text(
-                '${product.groups.length} groupe(s)',
-                style: TextStyle(color: color.onSurfaceVariant),
-              ),
-              const Spacer(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Column(
                 children: [
-                  choisirButton(() => openWizard(), context),
+                  Container(
+                    height: 48,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: color.primary.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(Icons.fastfood_rounded, color: color.primary, size: 28),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(product.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  Text('${product.groups.length} groupe(s)',
+                      style: TextStyle(color: color.onSurfaceVariant)),
+                ],
+              ),
+              Row(
+                children: [
+                  FilledButton(
+                    onPressed: openWizard,
+                    style: FilledButton.styleFrom(
+                      shape: const CircleBorder(),
+                      minimumSize: const Size(44, 44),
+                      padding: EdgeInsets.zero,
+                    ),
+                    child: const Icon(Icons.shopping_cart_outlined, size: 20),
+                  ),
+                  const Spacer(),
                   IconButton(
-                    tooltip: 'Modifier',
                     onPressed: () async {
                       final ok = await _askPin(context);
                       if (!ok) return;
@@ -393,7 +395,9 @@ class _ProductCard extends StatelessWidget {
                         ),
                       );
                     },
-                    icon: const Icon(Icons.edit_outlined),
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 36, height: 36),
                   ),
                 ],
               ),
@@ -404,7 +408,7 @@ class _ProductCard extends StatelessWidget {
     );
   }
 }
-// --- DÜZELTME 2 SONU ---
+// --- DÜZELTME SONU ---
 
 /* =======================
     PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
