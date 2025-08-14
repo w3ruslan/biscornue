@@ -300,9 +300,11 @@ class ProductsPage extends StatelessWidget {
       );
     }
 
-    final w = MediaQuery.of(context).size.width;
-    final cross = w >= 900 ? 4 : (w >= 600 ? 3 : 2);
-    final itemRatio = w < 500 ? 0.78 : 0.90;
+    final width = MediaQuery.of(context).size.width;
+    int cross = 2;
+    if (width > 600) cross = 3;
+    if (width > 900) cross = 4;
+    final aspect = width < 500 ? 0.88 : 1.0;
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -310,7 +312,7 @@ class ProductsPage extends StatelessWidget {
         crossAxisCount: cross,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: itemRatio,
+        childAspectRatio: aspect,
       ),
       itemCount: products.length,
       itemBuilder: (_, i) => _ProductCard(product: products[i]),
@@ -328,8 +330,7 @@ class _ProductCard extends StatelessWidget {
 
     Future<void> openWizard() async {
       final added = await Navigator.push<bool>(
-        context,
-        MaterialPageRoute(builder: (_) => OrderWizard(product: product)),
+        context, MaterialPageRoute(builder: (_) => OrderWizard(product: product)),
       );
       if (added == true && context.mounted) {
         _snack(context, 'Ajouté au panier.');
@@ -340,67 +341,52 @@ class _ProductCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(24),
       onTap: openWizard,
       child: Ink(
-        decoration: BoxDecoration(
-          color: color.surfaceVariant,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 220),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+        decoration: BoxDecoration(color: color.surfaceVariant, borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Container(
+              height: 56, width: 56,
+              decoration: BoxDecoration(color: color.primary.withOpacity(0.15), borderRadius: BorderRadius.circular(16)),
+              child: Icon(Icons.fastfood_rounded, color: color.primary, size: 32),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              product.name,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const Spacer(),
+            const SizedBox(height: 6), 
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  height: 56, width: 56,
-                  decoration: BoxDecoration(
-                    color: color.primary.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(Icons.fastfood_rounded, color: color.primary, size: 32),
-                ),
-                const SizedBox(height: 16),
-                Text(product.name,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                Text('${product.groups.length} groupe(s)',
-                    style: TextStyle(color: color.onSurfaceVariant)),
-
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    choisirButton(() => openWizard(), context),
-                    IconButton(
-                      tooltip: 'Modifier',
-                      onPressed: () async {
-                        final ok = await _askPin(context);
-                        if (!ok) return;
-                        Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => CreateProductPage(
-                            onGoToTab: (_) {},
-                            editIndex: _findProductIndex(context, product),
-                          ),
-                        ));
-                      },
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                  ],
+                choisirButton(() => openWizard(), context),
+                IconButton(
+                  tooltip: 'Modifier',
+                  onPressed: () async {
+                    final ok = await _askPin(context);
+                    if (!ok) return;
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CreateProductPage(
+                          onGoToTab: (_) {},
+                          editIndex: AppScope.of(context).products.indexOf(product),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.edit_outlined),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 4),
+          ]),
         ),
       ),
     );
   }
-
-  int _findProductIndex(BuildContext context, Product p) {
-    return AppScope.of(context).products.indexOf(p);
-  }
 }
-
 
 /* =======================
     PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
@@ -700,7 +686,16 @@ class _OptionEditorState extends State<_OptionEditor> {
     ======================= */
 class OrderWizard extends StatefulWidget {
   final Product product;
-  const OrderWizard({super.key, required this.product});
+  final Map<String, List<OptionItem>>? initialPicked;
+  final bool editMode;
+
+  const OrderWizard({
+    super.key,
+    required this.product,
+    this.initialPicked,
+    this.editMode = false,
+  });
+
   @override
   State<OrderWizard> createState() => _OrderWizardState();
 }
@@ -708,6 +703,16 @@ class OrderWizard extends StatefulWidget {
 class _OrderWizardState extends State<OrderWizard> {
   int step = 0;
   final Map<String, List<OptionItem>> picked = {};
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialPicked != null) {
+      for (final e in widget.initialPicked!.entries) {
+        picked[e.key] = List<OptionItem>.from(e.value);
+      }
+    }
+  }
 
   void _toggleSingle(OptionGroup g, OptionItem it) { picked[g.id] = [it]; setState(() {}); }
   void _toggleMulti(OptionGroup g, OptionItem it) {
@@ -734,48 +739,67 @@ class _OrderWizardState extends State<OrderWizard> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            if (isSummary) { setState(() => step = groups.isEmpty ? 0 : groups.length - 1); }
-            else if (step > 0) { setState(() => step--); }
-            else { Navigator.pop(context); }
+            if (isSummary) {
+              setState(() => step = groups.isEmpty ? 0 : groups.length - 1);
+            } else if (step > 0) {
+              setState(() => step--);
+            } else {
+              Navigator.pop(context);
+            }
           },
         ),
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
+          Positioned.fill(
             child: isSummary
                 ? _Summary(product: widget.product, picked: picked, total: total)
-                : _GroupStep(group: groups[step], picked: picked, toggleSingle: _toggleSingle, toggleMulti: _toggleMulti),
+                : _GroupStep(
+                    group: groups[step],
+                    picked: picked,
+                    toggleSingle: _toggleSingle,
+                    toggleMulti: _toggleMulti,
+                  ),
           ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Row(children: [
-                Expanded(child: OutlinedButton(
-                  onPressed: step == 0 ? null : () => setState(() => step--),
-                  child: const Text('Précédent'),
-                )),
-                const SizedBox(width: 12),
-                Expanded(child: FilledButton(
-                  onPressed: () {
-                    if (isSummary) {
-                      final app = AppScope.of(context);
-                      app.addLineToCart(widget.product, picked);
-                      if (!mounted) return; Navigator.pop(context, true); return;
-                    }
-                    final g = groups[step];
-                    if (!_validGroup(g)) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Sélection invalide pour "${g.title}".')),
-                      );
-                      return;
-                    }
-                    setState(() => step++);
-                  },
-                  child: Text(isSummary ? 'Ajouter au panier' : 'Suivant'),
-                )),
-              ]),
+          Positioned(
+            left: 16,
+            bottom: 16 + MediaQuery.of(context).padding.bottom,
+            child: FloatingActionButton.large(
+              heroTag: 'prevFab',
+              onPressed: step == 0
+                  ? null
+                  : () => setState(() => step--),
+              child: const Icon(Icons.arrow_back),
+            ),
+          ),
+          Positioned(
+            right: 16,
+            bottom: 16 + MediaQuery.of(context).padding.bottom,
+            child: FloatingActionButton.large(
+              heroTag: 'nextFab',
+              onPressed: () {
+                if (isSummary) {
+                  if (widget.editMode) {
+                    final result = {
+                      for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
+                    };
+                    Navigator.pop(context, result);
+                  } else {
+                    final app = AppScope.of(context);
+                    app.addLineToCart(widget.product, picked);
+                    if (!mounted) return;
+                    Navigator.pop(context, true);
+                  }
+                  return;
+                }
+                final g = groups[step];
+                if (!_validGroup(g)) {
+                  _showWarn(context, 'Sélection invalide pour "${g.title}".');
+                  return;
+                }
+                setState(() => step++);
+              },
+              child: Icon(isSummary ? (widget.editMode ? Icons.check : Icons.add_shopping_cart) : Icons.arrow_forward),
             ),
           ),
         ],
@@ -784,6 +808,7 @@ class _OrderWizardState extends State<OrderWizard> {
   }
 }
 
+// --- YENİ DÜZENLEME: KARE IZGARA GÖRÜNÜMÜ ---
 class _GroupStep extends StatelessWidget {
   final OptionGroup group;
   final Map<String, List<OptionItem>> picked;
@@ -791,59 +816,140 @@ class _GroupStep extends StatelessWidget {
   final void Function(OptionGroup, OptionItem) toggleMulti;
 
   const _GroupStep({
-    required this.group, required this.picked,
-    required this.toggleSingle, required this.toggleMulti,
+    required this.group,
+    required this.picked,
+    required this.toggleSingle,
+    required this.toggleMulti,
   });
 
   @override
   Widget build(BuildContext context) {
-    final list = picked[group.id] ?? const [];
     final color = Theme.of(context).colorScheme;
+    final size = MediaQuery.of(context).size;
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(12),
-      itemCount: group.items.length + 1,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (_, i) {
-        if (i == 0) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Text(
-              group.title + (group.multiple ? ' (min ${group.minSelect}, max ${group.maxSelect})' : ''),
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          );
-        }
-        final it = group.items[i - 1];
-        final selected = list.any((e) => e.id == it.id);
+    // Hedef kutu genişliği ~160px, ama en fazla 5 sütun
+    final desired = 160.0;
+    int cross = (size.width / desired).floor().clamp(2, 5);
 
-        return InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => group.multiple ? toggleMulti(group, it) : toggleSingle(group, it),
-          child: Ink(
-            decoration: BoxDecoration(
-              color: selected ? color.primaryContainer : color.surfaceVariant,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: selected ? color.primary : color.outlineVariant),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-              child: Row(children: [
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(it.label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                    if (it.price != 0)
-                      Text('+ €${it.price.toStringAsFixed(2)}', style: TextStyle(color: color.onSurfaceVariant)),
-                  ]),
-                ),
-                group.multiple
-                    ? Checkbox(value: selected, onChanged: (_) => toggleMulti(group, it))
-                    : Radio<bool>(value: true, groupValue: selected, onChanged: (_) => toggleSingle(group, it)),
-              ]),
-            ),
+    final selectedList = picked[group.id] ?? const <OptionItem>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          child: Text(
+            group.title +
+                (group.multiple
+                    ? '  (min ${group.minSelect}, max ${group.maxSelect})'
+                    : ''),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: cross,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1, // KARE
+            ),
+            itemCount: group.items.length,
+            itemBuilder: (_, i) {
+              final it = group.items[i];
+              final isSelected = selectedList.any((e) => e.id == it.id);
+
+              void onTap() {
+                if (group.multiple) {
+                  toggleMulti(group, it);
+                } else {
+                  toggleSingle(group, it);
+                }
+              }
+
+              return InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: onTap,
+                child: Ink(
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? color.primaryContainer
+                        : color.surfaceVariant,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isSelected ? color.primary : color.outlineVariant,
+                      width: isSelected ? 2 : 1,
+                    ),
+                  ),
+                  child: Stack(
+                    children: [
+                      // Sağ üstte onay / radio simgesi
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: group.multiple
+                            ? Icon(
+                                isSelected
+                                    ? Icons.check_box
+                                    : Icons.check_box_outline_blank,
+                                size: 22,
+                                color: isSelected
+                                    ? color.primary
+                                    : color.onSurfaceVariant,
+                              )
+                            : Icon(
+                                isSelected
+                                    ? Icons.radio_button_checked
+                                    : Icons.radio_button_unchecked,
+                                size: 22,
+                                color: isSelected
+                                    ? color.primary
+                                    : color.onSurfaceVariant,
+                              ),
+                      ),
+                      // İçerik
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // İsim
+                              Text(
+                                it.label,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              // Fiyat (varsa)
+                              if (it.price != 0)
+                                Text(
+                                  '+ ${_formatEuro(it.price)}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: color.onSurfaceVariant,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -940,7 +1046,38 @@ class CartPage extends StatelessWidget {
                       ],
                   ],
                 ),
-                trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => app.removeCartLineAt(i)),
+                trailing: Wrap(
+                  spacing: 4,
+                  children: [
+                    IconButton(
+                      tooltip: 'Düzenle',
+                      icon: const Icon(Icons.edit_outlined),
+                      onPressed: () async {
+                        final result = await Navigator.push<Map<String, List<OptionItem>>>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => OrderWizard(
+                              product: l.product,
+                              initialPicked: l.picked,
+                              editMode: true,
+                            ),
+                          ),
+                        );
+                        if (result != null) {
+                          app.updateCartLineAt(i, result);
+                          if (context.mounted) {
+                            _snack(context, 'Satır güncellendi.');
+                          }
+                        }
+                      },
+                    ),
+                    IconButton(
+                      tooltip: 'Sil',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => app.removeCartLineAt(i),
+                    ),
+                  ],
+                ),
               );
             },
           ),
@@ -961,9 +1098,7 @@ class CartPage extends StatelessWidget {
               if (name == null) return;
               AppScope.of(context).finalizeCartToOrder(customer: name);
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Commande validée pour "$name".')),
-                );
+                _snack(context, 'Commande validée pour "$name".');
               }
             },
             icon: const Icon(Icons.check),
@@ -1002,6 +1137,7 @@ class OrdersPage extends StatelessWidget {
           child: Row(children: [
             const Text('Commandes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Spacer(),
+            const SizedBox(width: 8),
             TextButton.icon(
               onPressed: () async {
                 final pinOk = await _askPin(context); if (!pinOk) return;
@@ -1044,17 +1180,9 @@ class OrdersPage extends StatelessWidget {
                   onPressed: () async {
                     try {
                       await printOrderAndroid(o);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Fiş yazıcıya gönderildi.')),
-                        );
-                      }
+                      _snack(context, 'Fiş yazıcıya gönderildi.');
                     } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Yazdırma hatası: $e')),
-                        );
-                      }
+                      _snack(context, 'Yazdırma hatası: $e');
                     }
                   },
                   tooltip: 'Imprimer',
@@ -1108,16 +1236,10 @@ class OrdersPage extends StatelessWidget {
                               await printOrderAndroid(o);
                               if (context.mounted) {
                                 Navigator.pop(context); // Diyalogu kapat
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Fiş yazıcıya gönderildi.')),
-                                );
+                                _snack(context, 'Fiş yazıcıya gönderildi.');
                               }
                             } catch (e) {
-                               if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Yazdırma hatası: $e')),
-                                );
-                              }
+                               _snack(context, 'Yazdırma hatası: $e');
                             }
                           },
                           child: const Text('Imprimer'),
@@ -1155,7 +1277,9 @@ Future<bool> _askPin(BuildContext context) async {
       ],
     ),
   );
-  if (ok != true && context.mounted) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code incorrect.'))); }
+  if (ok != true) {
+    _snack(context, 'Code incorrect.');
+  }
   return ok == true;
 }
 
@@ -1205,45 +1329,45 @@ Future<String?> _askCustomerName(BuildContext context) async {
   );
 }
 
-void _snack(BuildContext context, String msg) {
-  if (context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
+void _snack(BuildContext context, String msg, {int ms = 1200}) {
+  if (!context.mounted) return;
+  final bottomInset = MediaQuery.of(context).padding.bottom;
+  final bottomBar = kBottomNavigationBarHeight;
+  final bottomMargin = 12 + bottomInset + bottomBar;
+
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        duration: Duration(milliseconds: ms),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.fromLTRB(12, 0, 12, bottomMargin),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        dismissDirection: DismissDirection.horizontal,
+      ),
+    );
+}
+
+void _showWarn(BuildContext context, String msg) {
+  _snack(context, msg);
 }
 
 /* =======================
     Choisir butonu (kırılma yok)
     ======================= */
 Widget choisirButton(VoidCallback onTap, BuildContext context) {
-  final w = MediaQuery.of(context).size.width;
-  final isTiny = w < 360; // çok dar telefonlar
-
-  if (isTiny) {
-    return FilledButton.icon(
-      onPressed: onTap,
-      icon: const Icon(Icons.shopping_cart_outlined, size: 20),
-      label: const SizedBox.shrink(),
-      style: FilledButton.styleFrom(
-        shape: const StadiumBorder(),
-        minimumSize: const Size(56, 44),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+  final color = Theme.of(context).colorScheme;
+  return Material(
+    color: color.primary,
+    shape: const CircleBorder(),
+    child: InkWell(
+      customBorder: const CircleBorder(),
+      onTap: onTap,
+      child: const SizedBox(
+        height: 48, width: 48,
+        child: Icon(Icons.shopping_cart_outlined, color: Colors.white),
       ),
-    );
-  }
-
-  return FilledButton.icon(
-    onPressed: onTap,
-    icon: const Icon(Icons.shopping_cart_outlined, size: 20),
-    label: const Text(
-      'Choisir',
-      maxLines: 1,
-      softWrap: false,
-      overflow: TextOverflow.fade,
-    ),
-    style: FilledButton.styleFrom(
-      shape: const StadiumBorder(),
-      minimumSize: const Size(120, 44),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
     ),
   );
 }
@@ -1254,61 +1378,111 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
-String _sanitize(String s) {
-  // ESC/POS çoğunlukla ASCII; TR/FR karakterleri sadeleştir
-  const map = {
-    'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
-    'ş':'s','Ş':'S','ü':'u','Ü':'U','é':'e','è':'e','ê':'e','á':'a','à':'a','â':'a',
-    'ô':'o','ù':'u','€':' EUR ','–':'-','—':'-','…':'...'
-  };
-  final b = StringBuffer();
-  for (final r in s.runes) {
-    final ch = String.fromCharCode(r);
-    b.write(map[ch] ?? ch);
+String _money(double v) =>
+    '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
+
+String _rightLine(String left, String right, {int width = 32}) {
+  left = left.replaceAll('\n', ' ');
+  right = right.replaceAll('\n', ' ');
+  if (left.length + right.length > width) {
+    left = left.substring(0, width - right.length);
   }
-  return b.toString();
+  return left + ' ' * (width - left.length - right.length) + right;
+}
+
+void _cmd(Socket s, List<int> bytes) => s.add(bytes);
+void _boldOn(Socket s)  => _cmd(s, [27, 69, 1]);
+void _boldOff(Socket s) => _cmd(s, [27, 69, 0]);
+void _size(Socket s, int n) => _cmd(s, [29, 33, n]);
+void _alignLeft(Socket s)   => _cmd(s, [27, 97, 0]);
+void _alignCenter(Socket s) => _cmd(s, [27, 97, 1]);
+void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
+
+void _writeCp1252(Socket socket, String text) {
+  final out = <int>[];
+  for (final r in text.runes) {
+    if (r == 0x20AC) { // €
+      out.add(0x80);
+      continue;
+    }
+    if (r <= 0x7F) { // ASCII
+      out.add(r);
+      continue;
+    }
+    final ch = String.fromCharCode(r);
+    const repl = {
+      'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
+      'ş':'s','Ş':'S','ü':'u','Ü':'U','é':'e','è':'e','ê':'e','á':'a','à':'a','â':'a',
+      'ô':'o','ù':'u','–':'-','—':'-','…':'...',
+    };
+    final s = repl[ch] ?? '?';
+    for (final cu in s.codeUnits) {
+      if (cu == 0x20AC) { out.add(0x80); } else { out.add(cu <= 0x7F ? cu : 0x3F); }
+    }
+  }
+  socket.add(out);
 }
 
 Future<void> printOrderAndroid(SavedOrder o) async {
   final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  void writeText(String t) => socket.add(ascii.encode(_sanitize(t)));
-  void cmd(List<int> bytes) => socket.add(bytes);
+  _cmd(socket, [27, 64]);
+  _cmd(socket, [27, 116, 16]);
 
-  // ESC @ (init)
-  cmd([27, 64]);
+  _alignCenter(socket);
+  _size(socket, 17);
+  _boldOn(socket);
+  _writeCp1252(socket, '*** BISCORNUE ***\n');
+  _boldOff(socket);
+  _size(socket, 0);
 
-  // Başlık merkez
-  cmd([27, 97, 1]); // ESC a 1 (center)
-  writeText('*** BISCORNUE ***\n');
-  if (o.customer.isNotEmpty) writeText('Client: ${o.customer}\n');
+  if (o.customer.isNotEmpty) {
+    _size(socket, 1);
+    _boldOn(socket);
+    _writeCp1252(socket, 'Client: ${o.customer}\n');
+    _boldOff(socket);
+    _size(socket, 0);
+  }
+
   final d = o.createdAt;
-  writeText('${_two(d.day)}/${_two(d.month)}/${d.year} ${_two(d.hour)}:${_two(d.minute)}\n');
-  cmd([27, 97, 0]); // sola dön
-  writeText('------------------------------\n');
+  _writeCp1252(socket, '${_two(d.day)}/${_two(d.month)}/${d.year} ${_two(d.hour)}:${_two(d.minute)}\n');
+  _alignLeft(socket);
+  _writeCp1252(socket, '------------------------------\n');
 
   for (int i = 0; i < o.lines.length; i++) {
     final l = o.lines[i];
-    writeText('Item ${i + 1}: ${l.product.name}\n');
+    _writeCp1252(socket, 'Item ${i + 1}: ${l.product.name}\n');
     for (final g in l.product.groups) {
       final sel = l.picked[g.id] ?? const <OptionItem>[];
       if (sel.isNotEmpty) {
-        writeText('  ${g.title}:\n');
+        _writeCp1252(socket, '  ${g.title}:\n');
         for (final it in sel) {
-          final p = it.price == 0 ? '' : ' (+${it.price.toStringAsFixed(2)} EUR)';
-          writeText('    • ${it.label}$p\n');
+          final p = it.price == 0 ? '' : ' (+${_money(it.price)})';
+          _writeCp1252(socket, '    * ${it.label}$p\n');
         }
       }
     }
-    writeText('\n');
+
+    _alignRight(socket);
+    _writeCp1252(socket, _money(l.total) + '\n');
+    _alignLeft(socket);
+    _writeCp1252(socket, '\n');
   }
 
-  writeText('------------------------------\n');
-  writeText('TOTAL: ${o.total.toStringAsFixed(2)} EUR\n');
+  _writeCp1252(socket, '------------------------------\n');
 
-  // 2 satır besle + kısmi kes (GS V 66 0) — çoğu Epson’da çalışır
-  cmd([10, 10, 29, 86, 66, 0]);
+  _alignRight(socket);
+  _boldOn(socket);
+  _size(socket, 1);
+  _writeCp1252(socket, _rightLine('TOTAL', _money(o.total)) + '\n');
+  _size(socket, 0);
+  _boldOff(socket);
+
+  _cmd(socket, [10, 10, 29, 86, 66, 0]);
 
   await socket.flush();
   await socket.close();
 }
+
+// UI için € biçimi (baskıda ASCII kullanıyoruz ama ekranda € göstermek güzel)
+String _formatEuro(double v) => '€${v.toStringAsFixed(2)}';
