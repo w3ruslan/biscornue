@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:convert';
+import 'dart:convert'; // ascii yerine latin1 kullanacağız
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
@@ -967,7 +967,6 @@ class OrdersPage extends StatelessWidget {
           child: Row(children: [
             const Text('Commandes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Spacer(),
-            // YAZICI DEĞİŞTİRME BUTONU KALDIRILDI, ARTIK GEREKLİ DEĞİL
             const SizedBox(width: 8),
             TextButton.icon(
               onPressed: () async {
@@ -1006,7 +1005,6 @@ class OrdersPage extends StatelessWidget {
                   '${o.createdAt.hour.toString().padLeft(2, '0')}:${o.createdAt.minute.toString().padLeft(2, '0')} '
                   '${o.createdAt.day.toString().padLeft(2, '0')}/${o.createdAt.month.toString().padLeft(2, '0')}',
                 ),
-                // YAZDIRMA BUTONU YENİ FONKSİYONA BAĞLANDI
                 trailing: IconButton(
                   icon: const Icon(Icons.print_outlined),
                   onPressed: () async {
@@ -1070,7 +1068,6 @@ class OrdersPage extends StatelessWidget {
                         ),
                       ),
                       actions: [
-                        // DİYALOG İÇİNDEKİ YAZDIRMA BUTONU DA YENİ FONKSİYONA BAĞLANDI
                         TextButton(
                           onPressed: () async {
                             try {
@@ -1224,12 +1221,24 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 String _two(int n) => n.toString().padLeft(2, '0');
 
 String _sanitize(String s) {
-  // ESC/POS çoğunlukla ASCII; TR/FR karakterleri sadeleştir
   const map = {
+    // TR/FR harfleri:
     'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
-    'ş':'s','Ş':'S','ü':'u','Ü':'U','é':'e','è':'e','ê':'e','á':'a','à':'a','â':'a',
-    'ô':'o','ù':'u','€':' EUR ','–':'-','—':'-','…':'...'
+    'ş':'s','Ş':'S','ü':'u','Ü':'U',
+    'é':'e','è':'e','ê':'e','ë':'e','É':'E','È':'E','Ê':'E',
+    'á':'a','à':'a','â':'a','ä':'a','Á':'A','À':'A','Â':'A','Ä':'A',
+    'ô':'o','ò':'o','ó':'o','Ö':'O','Ó':'O','Ò':'O','Ô':'O',
+    'ù':'u','ú':'u','û':'u','Ü':'U','Û':'U','Ú':'U','Ù':'U',
+    'œ':'oe','Œ':'OE','æ':'ae','Æ':'AE',
+
+    // Semboller / tipografik işaretler:
+    '€':' EUR ',
+    '•':'-',
+    '–':'-','—':'-',
+    '’':"'", '‘':"'", '“':'"', '”':'"',
+    '\r':'', '\t':' ',
   };
+
   final b = StringBuffer();
   for (final r in s.runes) {
     final ch = String.fromCharCode(r);
@@ -1241,7 +1250,7 @@ String _sanitize(String s) {
 Future<void> printOrderAndroid(SavedOrder o) async {
   final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  void writeText(String t) => socket.add(ascii.encode(_sanitize(t)));
+  void writeText(String t) => socket.add(latin1.encode(_sanitize(t)));
   void cmd(List<int> bytes) => socket.add(bytes);
 
   // ESC @ (init)
@@ -1275,8 +1284,10 @@ Future<void> printOrderAndroid(SavedOrder o) async {
   writeText('------------------------------\n');
   writeText('TOTAL: ${o.total.toStringAsFixed(2)} EUR\n');
 
-  // 2 satır besle + kısmi kes (GS V 66 0) — çoğu Epson’da çalışır
-  cmd([10, 10, 29, 86, 66, 0]);
+  // 4 satır besle (ESC d n)
+  cmd([27, 100, 4]);
+  // kısmi kes (GS V 66 0)
+  cmd([29, 86, 66, 0]);
 
   await socket.flush();
   await socket.close();
