@@ -232,9 +232,10 @@ class _HomeState extends State<Home> {
     final totalCart = app.cart.fold(0.0, (s, l) => s + l.total);
     final cartBadge = app.cart.length;
 
+    // --- DÜZELTME: 'onToTab' YAZIM HATASI GİDERİLDİ ---
     final pages = [
       const ProductsPage(),
-      CreateProductPage(onToTab: (i) => setState(() => index = i)),
+      CreateProductPage(onGoToTab: (i) => setState(() => index = i)), // <-- DÜZELTİLDİ
       const CartPage(),
       const OrdersPage(),
     ];
@@ -1284,8 +1285,6 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 // YENİ, PAKETSİZ YAZDIRMA YARDIMCILARI
 // ==================================================
 
-// --- DÜZELTME: EKSİK _two FONKSİYONU EKLENDİ ---
-// 2 haneli sıfır doldurma: 5 -> "05"
 String _two(int n) => n.toString().padLeft(2, '0');
 
 String _money(double v) =>
