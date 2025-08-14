@@ -267,15 +267,8 @@ class _HomeState extends State<Home> {
           ),
           const NavigationDestination(icon: Icon(Icons.receipt_long), label: 'Commandes'),
         ],
-        // --- DÜZELTME: SEPETE GİDERKEN UYARIYI KAPAT ---
         onDestinationSelected: (i) async {
-          if (i == 1) { 
-            final ok = await _askPin(context); 
-            if (!ok) return; 
-          }
-          if (i == 2) { // Panier’e gidiyoruz
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          }
+          if (i == 1) { final ok = await _askPin(context); if (!ok) return; }
           setState(() => index = i);
         },
       ),
@@ -1397,4 +1390,5 @@ Future<void> printOrderAndroid(SavedOrder o) async {
   _cmd(socket, [10, 10, 29, 86, 66, 0]);
 
   await socket.flush();
-  await socket.close()
+  await socket.close();
+}
