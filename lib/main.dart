@@ -348,11 +348,13 @@ class _ProductCard extends StatelessWidget {
               child: Icon(Icons.fastfood_rounded, color: color.primary, size: 32),
             ),
             const SizedBox(height: 16),
-            Text(product.name, textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Text('${product.groups.length} groupe(s)', style: TextStyle(color: color.onSurfaceVariant)),
+            Text(
+              product.name,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
             const Spacer(),
+            const SizedBox(height: 6), 
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -362,18 +364,19 @@ class _ProductCard extends StatelessWidget {
                   onPressed: () async {
                     final ok = await _askPin(context);
                     if (!ok) return;
-                    Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => CreateProductPage(
-                        onGoToTab: (_) {},
-                        editIndex: _findProductIndex(context, product),
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CreateProductPage(
+                          onGoToTab: (_) {},
+                          editIndex: _findProductIndex(context, product),
+                        ),
                       ),
-                    ));
+                    );
                   },
                   icon: const Icon(Icons.edit_outlined),
                 ),
               ],
             ),
-            // --- DÜZELTME: KART TAŞMASINI ÖNLEMEK İÇİN EKLENDİ ---
             const SizedBox(height: 4),
           ]),
         ),
@@ -682,8 +685,8 @@ class _OptionEditorState extends State<_OptionEditor> {
     ======================= */
 class OrderWizard extends StatefulWidget {
   final Product product;
-  final Map<String, List<OptionItem>>? initialPicked; // mevcut seçimler
-  final bool editMode;                                // düzenleme mi?
+  final Map<String, List<OptionItem>>? initialPicked;
+  final bool editMode;
 
   const OrderWizard({
     super.key,
@@ -729,65 +732,74 @@ class _OrderWizardState extends State<OrderWizard> {
     final isSummary = step >= groups.length;
     final total = widget.product.priceForSelection(picked);
 
+    // --- YENİ DÜZENLEME: FAB BUTONLARI İÇİN SCAFFOLD ---
     return Scaffold(
       appBar: AppBar(
         title: Text(isSummary ? 'Récapitulatif' : widget.product.name),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            if (isSummary) { setState(() => step = groups.isEmpty ? 0 : groups.length - 1); }
-            else if (step > 0) { setState(() => step--); }
-            else { Navigator.pop(context); }
+            if (isSummary) {
+              setState(() => step = groups.isEmpty ? 0 : groups.length - 1);
+            } else if (step > 0) {
+              setState(() => step--);
+            } else {
+              Navigator.pop(context);
+            }
           },
         ),
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
+          Positioned.fill(
             child: isSummary
                 ? _Summary(product: widget.product, picked: picked, total: total)
-                : _GroupStep(group: groups[step], picked: picked, toggleSingle: _toggleSingle, toggleMulti: _toggleMulti),
-          ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Row(children: [
-                Expanded(child: OutlinedButton(
-                  onPressed: step == 0 ? null : () => setState(() => step--),
-                  child: const Text('Précédent'),
-                )),
-                const SizedBox(width: 12),
-                Expanded(child: FilledButton(
-                  onPressed: () {
-                    if (isSummary) {
-                      final result = {
-                        for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
-                      };
-                      if (widget.editMode) {
-                        Navigator.pop(context, result);
-                      } else {
-                        AppScope.of(context).addLineToCart(widget.product, picked);
-                        Navigator.pop(context, true);
-                      }
-                      return;
-                    }
-                    final g = groups[step];
-                    if (!_validGroup(g)) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Sélection invalide pour "${g.title}".')),
-                      );
-                      return;
-                    }
-                    setState(() => step++);
-                  },
-                  child: Text(
-                    isSummary
-                        ? (widget.editMode ? 'Mettre à jour' : 'Ajouter au panier')
-                        : 'Suivant',
+                : _GroupStep(
+                    group: groups[step],
+                    picked: picked,
+                    toggleSingle: _toggleSingle,
+                    toggleMulti: _toggleMulti,
                   ),
-                )),
-              ]),
+          ),
+          Positioned(
+            left: 16,
+            bottom: 16 + MediaQuery.of(context).padding.bottom,
+            child: FloatingActionButton.large(
+              heroTag: 'prevFab',
+              onPressed: step == 0
+                  ? null
+                  : () => setState(() => step--),
+              child: const Icon(Icons.arrow_back),
+            ),
+          ),
+          Positioned(
+            right: 16,
+            bottom: 16 + MediaQuery.of(context).padding.bottom,
+            child: FloatingActionButton.large(
+              heroTag: 'nextFab',
+              onPressed: () {
+                if (isSummary) {
+                  if (widget.editMode) {
+                    final result = {
+                      for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
+                    };
+                    Navigator.pop(context, result);
+                  } else {
+                    final app = AppScope.of(context);
+                    app.addLineToCart(widget.product, picked);
+                    if (!mounted) return;
+                    Navigator.pop(context, true);
+                  }
+                  return;
+                }
+                final g = groups[step];
+                if (!_validGroup(g)) {
+                  _showWarn(context, 'Sélection invalide pour "${g.title}".');
+                  return;
+                }
+                setState(() => step++);
+              },
+              child: Icon(isSummary ? (widget.editMode ? Icons.check : Icons.add_shopping_cart) : Icons.arrow_forward),
             ),
           ),
         ],
@@ -1257,40 +1269,31 @@ void _snack(BuildContext ctx, String msg) {
   }
 }
 
+// --- YENİ: YÜZEN UYARI MESAJI ---
+void _showWarn(BuildContext context, String msg) {
+  final bottom = 90 + MediaQuery.of(context).padding.bottom; // FAB’lere çarpmaması için
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      behavior: SnackBarBehavior.floating,
+      margin: EdgeInsets.fromLTRB(12, 0, 12, bottom),
+      duration: const Duration(seconds: 2),
+      content: Text(msg),
+    ),
+  );
+}
+
 /* =======================
     Choisir butonu (kırılma yok)
     ======================= */
 Widget choisirButton(VoidCallback onTap, BuildContext context) {
-  final w = MediaQuery.of(context).size.width;
-  final isTiny = w < 360; // çok dar telefonlar
-
-  if (isTiny) {
-    return FilledButton.icon(
-      onPressed: onTap,
-      icon: const Icon(Icons.shopping_cart_outlined, size: 20),
-      label: const SizedBox.shrink(),
-      style: FilledButton.styleFrom(
-        shape: const StadiumBorder(),
-        minimumSize: const Size(56, 44),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      ),
-    );
-  }
-
-  return FilledButton.icon(
+  return FilledButton(
     onPressed: onTap,
-    icon: const Icon(Icons.shopping_cart_outlined, size: 20),
-    label: const Text(
-      'Choisir',
-      maxLines: 1,
-      softWrap: false,
-      overflow: TextOverflow.fade,
-    ),
     style: FilledButton.styleFrom(
-      shape: const StadiumBorder(),
-      minimumSize: const Size(120, 44),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      shape: const CircleBorder(),
+      fixedSize: const Size(46, 46),
+      padding: EdgeInsets.zero,
     ),
+    child: const Icon(Icons.shopping_cart_outlined, size: 22),
   );
 }
 
@@ -1298,23 +1301,21 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 // YENİ, PAKETSİZ YAZDIRMA YARDIMCILARI
 // ==================================================
 
-String _two(int n) => n.toString().padLeft(2, '0');
+const int _COLS = 32;
 
-// --- DÜZELTME: GENİŞLETİLMİŞ TEMİZLEME FONKSİYONU ---
+String _money(double v) =>
+    '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
+
 String _sanitize(String s) {
   const map = {
-    // Türkçe
     'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O','ş':'s','Ş':'S','ü':'u','Ü':'U',
-    // Fransızca - aksanlar
     'é':'e','è':'e','ê':'e','ë':'e','É':'E','È':'E','Ê':'E','Ë':'E',
     'à':'a','â':'a','ä':'a','À':'A','Â':'A','Ä':'A',
     'î':'i','ï':'i','Î':'I','Ï':'I',
     'ô':'o','ö':'o','Ô':'O','Ö':'O',
     'ù':'u','û':'u','ü':'u','Ù':'U','Û':'U','Ü':'U',
     'ÿ':'y','Ÿ':'Y',
-    // Ligatürler
     'œ':'oe','Œ':'OE','æ':'ae','Æ':'AE',
-    // Diğerleri
     '€':' EUR ', 'º':'o','°':' deg ',
     '–':'-','—':'-','…':'...'
   };
@@ -1329,60 +1330,90 @@ String _sanitize(String s) {
     }
   }
 
-  // Kalan non-ASCII karakterleri güvenli hale getir (LF hariç)
   final out = StringBuffer();
   for (final r in b.toString().runes) {
-    if (r == 10 /* \n */ || (r >= 32 && r <= 126)) {
+    if (r == 10 || (r >= 32 && r <= 126)) {
       out.writeCharCode(r);
     } else {
-      out.write('?'); // son çare
+      out.write('?');
     }
   }
   return out.toString();
 }
 
+List<int> _cp1252Encode(String s) {
+  final out = <int>[];
+  for (final r in s.runes) {
+    switch (r) {
+      case 0x20AC: out.add(0x80); break; // €
+      case 0x0153: out.add(0x9C); break; // œ
+      case 0x0152: out.add(0x8C); break; // Œ
+      default:
+        if (r <= 0xFF) {
+          out.add(r);
+        } else {
+          out.add(0x3F);
+        }
+    }
+  }
+  return out;
+}
+
+void _write(Socket socket, String text) {
+  final safe = _sanitize(text);
+  socket.add(_cp1252Encode(safe));
+}
+
+void _cmd(Socket socket, List<int> bytes) => socket.add(bytes);
+
+void _writeRightBold(Socket s, String text) {
+  final len = text.length;
+  final spaces = (_COLS - len).clamp(0, 1000);
+  _cmd(s, [27, 69, 1]);
+  _write(s, ' ' * spaces + text + '\n');
+  _cmd(s, [27, 69, 0]);
+}
+
 Future<void> printOrderAndroid(SavedOrder o) async {
   final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  // --- DÜZELTME: YAZMA FONKSİYONU GÜVENLİ HALE GETİRİLDİ ---
-  void writeText(String t) {
-    final safe = _sanitize(t);
-    socket.add(ascii.encode(safe, allowInvalid: true));
-  }
-  void cmd(List<int> bytes) => socket.add(bytes);
+  void write(String t) => _write(socket, t);
+  void cmd(List<int> b) => _cmd(socket, b);
 
   cmd([27, 64]);
+  cmd([27, 116, 19]);
 
-  cmd([27, 97, 1]); 
-  writeText('*** BISCORNUE ***\n');
-  if (o.customer.isNotEmpty) writeText('Client: ${o.customer}\n');
+  cmd([27, 97, 1]);
+  write('*** BISCORNUE ***\n');
+  if (o.customer.isNotEmpty) write('Client: ${o.customer}\n');
   final d = o.createdAt;
-  writeText('${_two(d.day)}/${_two(d.month)}/${d.year} ${_two(d.hour)}:${_two(d.minute)}\n');
-  cmd([27, 97, 0]); 
-  writeText('------------------------------\n');
+  write('${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year} '
+        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}\n');
+  cmd([27, 97, 0]);
+  write('------------------------------\n');
 
   for (int i = 0; i < o.lines.length; i++) {
     final l = o.lines[i];
-    writeText('Item ${i + 1}: ${l.product.name}\n');
+    write('Item ${i + 1}: ${l.product.name}\n');
     for (final g in l.product.groups) {
       final sel = l.picked[g.id] ?? const <OptionItem>[];
       if (sel.isNotEmpty) {
-        writeText('  ${g.title}:\n');
+        write('${g.title}:\n');
         for (final it in sel) {
-          final p = it.price == 0 ? '' : ' (+${it.price.toStringAsFixed(2)} EUR)';
-          writeText('    • ${it.label}$p\n');
+          final plus = it.price == 0 ? '' : ' (+${_money(it.price).replaceAll(' €',' EUR')})';
+          write('  * ${it.label}$plus\n');
         }
       }
     }
-    writeText('  --> €${l.total.toStringAsFixed(2)}\n');
-    writeText('\n'); 
+    _writeRightBold(socket, _money(l.total));
+    write('\n');
   }
 
-  writeText('------------------------------\n');
-  writeText('TOTAL: ${o.total.toStringAsFixed(2)} EUR\n');
+  write('------------------------------\n');
 
-  cmd([27, 100, 4]);
-  cmd([29, 86, 66, 0]);
+  _writeRightBold(socket, 'TOTAL: ${_money(o.total)}');
+
+  cmd([10, 10, 29, 86, 66, 0]);
 
   await socket.flush();
   await socket.close();
