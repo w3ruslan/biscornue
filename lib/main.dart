@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:convert'; // <-- DÜZELTİLDİ (dart.convert değil)
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
@@ -234,7 +234,7 @@ class _HomeState extends State<Home> {
 
     final pages = [
       const ProductsPage(),
-      CreateProductPage(onGoToTab: (i) => setState(() => index = i)),
+      CreateProductPage(onToTab: (i) => setState(() => index = i)),
       const CartPage(),
       const OrdersPage(),
     ];
@@ -1284,7 +1284,9 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 // YENİ, PAKETSİZ YAZDIRMA YARDIMCILARI
 // ==================================================
 
-const int _COLS = 32;
+// --- DÜZELTME: EKSİK _two FONKSİYONU EKLENDİ ---
+// 2 haneli sıfır doldurma: 5 -> "05"
+String _two(int n) => n.toString().padLeft(2, '0');
 
 String _money(double v) =>
     '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
