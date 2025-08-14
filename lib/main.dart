@@ -377,7 +377,6 @@ class _ProductCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 4),
           ]),
         ),
       ),
@@ -732,7 +731,6 @@ class _OrderWizardState extends State<OrderWizard> {
     final isSummary = step >= groups.length;
     final total = widget.product.priceForSelection(picked);
 
-    // --- YENİ DÜZENLEME: FAB BUTONLARI İÇİN SCAFFOLD ---
     return Scaffold(
       appBar: AppBar(
         title: Text(isSummary ? 'Récapitulatif' : widget.product.name),
@@ -1269,9 +1267,8 @@ void _snack(BuildContext ctx, String msg) {
   }
 }
 
-// --- YENİ: YÜZEN UYARI MESAJI ---
 void _showWarn(BuildContext context, String msg) {
-  final bottom = 90 + MediaQuery.of(context).padding.bottom; // FAB’lere çarpmaması için
+  final bottom = 90 + MediaQuery.of(context).padding.bottom;
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       behavior: SnackBarBehavior.floating,
@@ -1286,14 +1283,18 @@ void _showWarn(BuildContext context, String msg) {
     Choisir butonu (kırılma yok)
     ======================= */
 Widget choisirButton(VoidCallback onTap, BuildContext context) {
-  return FilledButton(
-    onPressed: onTap,
-    style: FilledButton.styleFrom(
-      shape: const CircleBorder(),
-      fixedSize: const Size(46, 46),
-      padding: EdgeInsets.zero,
+  final color = Theme.of(context).colorScheme;
+  return Material(
+    color: color.primary,
+    shape: const CircleBorder(),
+    child: InkWell(
+      customBorder: const CircleBorder(),
+      onTap: onTap,
+      child: const SizedBox(
+        height: 48, width: 48,
+        child: Icon(Icons.shopping_cart_outlined, color: Colors.white),
+      ),
     ),
-    child: const Icon(Icons.shopping_cart_outlined, size: 22),
   );
 }
 
@@ -1301,119 +1302,120 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 // YENİ, PAKETSİZ YAZDIRMA YARDIMCILARI
 // ==================================================
 
-const int _COLS = 32;
+// --- Yardımcılar ---
+String _two(int n) => n.toString().padLeft(2, '0');
 
-String _money(double v) =>
-    '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
-
-String _sanitize(String s) {
-  const map = {
-    'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O','ş':'s','Ş':'S','ü':'u','Ü':'U',
-    'é':'e','è':'e','ê':'e','ë':'e','É':'E','È':'E','Ê':'E','Ë':'E',
-    'à':'a','â':'a','ä':'a','À':'A','Â':'A','Ä':'A',
-    'î':'i','ï':'i','Î':'I','Ï':'I',
-    'ô':'o','ö':'o','Ô':'O','Ö':'O',
-    'ù':'u','û':'u','ü':'u','Ù':'U','Û':'U','Ü':'U',
-    'ÿ':'y','Ÿ':'Y',
-    'œ':'oe','Œ':'OE','æ':'ae','Æ':'AE',
-    '€':' EUR ', 'º':'o','°':' deg ',
-    '–':'-','—':'-','…':'...'
-  };
-
-  final b = StringBuffer();
-  for (final r in s.runes) {
-    final ch = String.fromCharCode(r);
-    if (map.containsKey(ch)) {
-      b.write(map[ch]);
-    } else {
-      b.write(ch);
-    }
-  }
-
-  final out = StringBuffer();
-  for (final r in b.toString().runes) {
-    if (r == 10 || (r >= 32 && r <= 126)) {
-      out.writeCharCode(r);
-    } else {
-      out.write('?');
-    }
-  }
-  return out.toString();
-}
-
-List<int> _cp1252Encode(String s) {
+/// CP1252 (Windows-1252) ile yaz. '€' -> 0x80.
+/// Diğer ASCII dışı karakterler için sanitize + '?'.
+void _writeCp1252(Socket socket, String text) {
   final out = <int>[];
-  for (final r in s.runes) {
-    switch (r) {
-      case 0x20AC: out.add(0x80); break; // €
-      case 0x0153: out.add(0x9C); break; // œ
-      case 0x0152: out.add(0x8C); break; // Œ
-      default:
-        if (r <= 0xFF) {
-          out.add(r);
-        } else {
-          out.add(0x3F);
-        }
+  for (final r in text.runes) {
+    if (r == 0x20AC) { // €
+      out.add(0x80);
+      continue;
+    }
+    if (r <= 0x7F) { // ASCII
+      out.add(r);
+      continue;
+    }
+    // sanitize
+    final ch = String.fromCharCode(r);
+    const repl = {
+      'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
+      'ş':'s','Ş':'S','ü':'u','Ü':'U','é':'e','è':'e','ê':'e','á':'a','à':'a','â':'a',
+      'ô':'o','ù':'u','–':'-','—':'-','…':'...',
+    };
+    final s = repl[ch] ?? '?';
+    for (final cu in s.codeUnits) {
+      if (cu == 0x20AC) { out.add(0x80); } else { out.add(cu <= 0x7F ? cu : 0x3F); }
     }
   }
-  return out;
+  socket.add(out);
 }
 
-void _write(Socket socket, String text) {
-  final safe = _sanitize(text);
-  socket.add(_cp1252Encode(safe));
+String _money(double v) => '€${v.toStringAsFixed(2)}';
+
+String _rightLine(String left, String right, {int width = 32}) {
+  left = left.replaceAll('\n', ' ');
+  right = right.replaceAll('\n', ' ');
+  if (left.length + right.length > width) {
+    left = left.substring(0, width - right.length);
+  }
+  return left + ' ' * (width - left.length - right.length) + right;
 }
 
-void _cmd(Socket socket, List<int> bytes) => socket.add(bytes);
-
-void _writeRightBold(Socket s, String text) {
-  final len = text.length;
-  final spaces = (_COLS - len).clamp(0, 1000);
-  _cmd(s, [27, 69, 1]);
-  _write(s, ' ' * spaces + text + '\n');
-  _cmd(s, [27, 69, 0]);
-}
+// --- ESC/POS komut yazımı ---
+void _cmd(Socket s, List<int> bytes) => s.add(bytes);
+void _boldOn(Socket s)  => _cmd(s, [27, 69, 1]);   // ESC E 1
+void _boldOff(Socket s) => _cmd(s, [27, 69, 0]);   // ESC E 0
+void _size(Socket s, int n) => _cmd(s, [29, 33, n]); // GS ! n (0 normal, 16=2x gen, 1=2x yük.)
+void _alignLeft(Socket s)   => _cmd(s, [27, 97, 0]);
+void _alignCenter(Socket s) => _cmd(s, [27, 97, 1]);
+void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
 
 Future<void> printOrderAndroid(SavedOrder o) async {
   final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  void write(String t) => _write(socket, t);
-  void cmd(List<int> b) => _cmd(socket, b);
+  // init + codepage CP1252 (Euro sembolü için)
+  _cmd(socket, [27, 64]);      // ESC @
+  _cmd(socket, [27, 116, 16]); // ESC t 16 -> CP1252
 
-  cmd([27, 64]);
-  cmd([27, 116, 19]);
+  // Başlık
+  _alignCenter(socket);
+  _size(socket, 17); // 2x gen + 2x yük (0x11)
+  _boldOn(socket);
+  _writeCp1252(socket, '*** BISCORNUE ***\n');
+  _boldOff(socket);
+  _size(socket, 0);
 
-  cmd([27, 97, 1]);
-  write('*** BISCORNUE ***\n');
-  if (o.customer.isNotEmpty) write('Client: ${o.customer}\n');
+  // MÜŞTERİ – büyük ve kalın
+  if (o.customer.isNotEmpty) {
+    _size(socket, 1); // 2x yükseklik
+    _boldOn(socket);
+    _writeCp1252(socket, 'Client: ${o.customer}\n');
+    _boldOff(socket);
+    _size(socket, 0);
+  }
+
   final d = o.createdAt;
-  write('${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year} '
-        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}\n');
-  cmd([27, 97, 0]);
-  write('------------------------------\n');
+  _writeCp1252(socket, '${_two(d.day)}/${_two(d.month)}/${d.year} ${_two(d.hour)}:${_two(d.minute)}\n');
+  _alignLeft(socket);
+  _writeCp1252(socket, '------------------------------\n');
 
+  // Satırlar
   for (int i = 0; i < o.lines.length; i++) {
     final l = o.lines[i];
-    write('Item ${i + 1}: ${l.product.name}\n');
+    _writeCp1252(socket, 'Item ${i + 1}: ${l.product.name}\n');
     for (final g in l.product.groups) {
       final sel = l.picked[g.id] ?? const <OptionItem>[];
       if (sel.isNotEmpty) {
-        write('${g.title}:\n');
+        _writeCp1252(socket, '  ${g.title}:\n');
         for (final it in sel) {
-          final plus = it.price == 0 ? '' : ' (+${_money(it.price).replaceAll(' €',' EUR')})';
-          write('  * ${it.label}$plus\n');
+          final p = it.price == 0 ? '' : ' (+${_money(it.price)})';
+          _writeCp1252(socket, '    * ${it.label}$p\n');
         }
       }
     }
-    _writeRightBold(socket, _money(l.total));
-    write('\n');
+
+    // Bu ürünün toplamını SAĞA yaz (normal boy)
+    _alignRight(socket);
+    _writeCp1252(socket, _money(l.total) + '\n');
+    _alignLeft(socket);
+    _writeCp1252(socket, '\n');
   }
 
-  write('------------------------------\n');
+  _writeCp1252(socket, '------------------------------\n');
 
-  _writeRightBold(socket, 'TOTAL: ${_money(o.total)}');
+  // TOPLAM – sağda, büyük ve kalın
+  _alignRight(socket);
+  _boldOn(socket);
+  _size(socket, 1); // 2x yükseklik
+  _writeCp1252(socket, _rightLine('TOTAL', _money(o.total)) + '\n');
+  _size(socket, 0);
+  _boldOff(socket);
 
-  cmd([10, 10, 29, 86, 66, 0]);
+  // Kesim
+  _cmd(socket, [10, 10, 29, 86, 66, 0]); // feed + partial cut
 
   await socket.flush();
   await socket.close();
