@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart.convert';
+import 'dart:convert'; // <-- DÜZELTİLDİ (dart.convert değil)
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
@@ -791,7 +791,7 @@ class _OrderWizardState extends State<OrderWizard> {
                 }
                 final g = groups[step];
                 if (!_validGroup(g)) {
-                  _snack(context, 'Sélection invalide pour "${g.title}".');
+                  _showWarn(context, 'Sélection invalide pour "${g.title}".');
                   return;
                 }
                 setState(() => step++);
@@ -1244,11 +1244,21 @@ Future<String?> _askCustomerName(BuildContext context) async {
   );
 }
 
-// --- DÜZELTME: TEK VE DOĞRU SNACKBAR YARDIMCISI ---
 void _snack(BuildContext context, String msg) {
   if (!context.mounted) return;
   ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(msg)));
+}
+
+void _showWarn(BuildContext context, String msg) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(msg),
+      duration: const Duration(milliseconds: 1200),
+      behavior: SnackBarBehavior.floating,
+      margin: const EdgeInsets.only(bottom: 72, left: 12, right: 12),
+    ),
+  );
 }
 
 /* =======================
