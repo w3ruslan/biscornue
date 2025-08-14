@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:convert'; // ascii yerine latin1 kullanacağız
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
@@ -113,7 +113,6 @@ class AppState extends ChangeNotifier {
   void removeCartLineAt(int i) { if (i>=0 && i<cart.length) { cart.removeAt(i); notifyListeners(); } }
   void clearCart() { cart.clear(); notifyListeners(); }
 
-  // --- YENİ FONKSİYON: SEPETTEKİ SATIRI GÜNCELLEME ---
   void updateCartLineAt(int i, Map<String, List<OptionItem>> picked) {
     if (i < 0 || i >= cart.length) return;
     final deep = {
@@ -123,7 +122,6 @@ class AppState extends ChangeNotifier {
     cart[i] = CartLine(product: p, picked: deep);
     notifyListeners();
   }
-  // --- YENİ FONKSİYON SONU ---
 
   void finalizeCartToOrder({required String customer}) {
     if (cart.isEmpty) return;
@@ -375,6 +373,8 @@ class _ProductCard extends StatelessWidget {
                 ),
               ],
             ),
+            // --- DÜZELTME: KART TAŞMASINI ÖNLEMEK İÇİN EKLENDİ ---
+            const SizedBox(height: 4),
           ]),
         ),
       ),
@@ -680,7 +680,6 @@ class _OptionEditorState extends State<_OptionEditor> {
 /* =======================
     WIZARD (BUTONLAR İÇERİKTE, BİRAZ DAHA YUKARIDA)
     ======================= */
-// --- YENİ DÜZENLEME MODU PARAMETRELERİ ---
 class OrderWizard extends StatefulWidget {
   final Product product;
   final Map<String, List<OptionItem>>? initialPicked; // mevcut seçimler
@@ -701,7 +700,6 @@ class _OrderWizardState extends State<OrderWizard> {
   int step = 0;
   final Map<String, List<OptionItem>> picked = {};
 
-  // --- YENİ: DÜZENLEME MODU İÇİN MEVCUT SEÇİMLERİ YÜKLE ---
   @override
   void initState() {
     super.initState();
@@ -762,16 +760,13 @@ class _OrderWizardState extends State<OrderWizard> {
                 const SizedBox(width: 12),
                 Expanded(child: FilledButton(
                   onPressed: () {
-                    // --- YENİ: DÜZENLEME MODU İÇİN BUTON DAVRANIŞI ---
                     if (isSummary) {
                       final result = {
                         for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
                       };
                       if (widget.editMode) {
-                        // düzenlemede yeni seçimleri geri döndür
                         Navigator.pop(context, result);
                       } else {
-                        // normal ekleme
                         AppScope.of(context).addLineToCart(widget.product, picked);
                         Navigator.pop(context, true);
                       }
@@ -786,7 +781,6 @@ class _OrderWizardState extends State<OrderWizard> {
                     }
                     setState(() => step++);
                   },
-                  // --- YENİ: DÜZENLEME MODU İÇİN BUTON ETİKETİ ---
                   child: Text(
                     isSummary
                         ? (widget.editMode ? 'Mettre à jour' : 'Ajouter au panier')
@@ -958,7 +952,6 @@ class CartPage extends StatelessWidget {
                       ],
                   ],
                 ),
-                // --- YENİ: DÜZENLE VE SİL BUTONLARI ---
                 trailing: Wrap(
                   spacing: 4,
                   children: [
@@ -971,7 +964,7 @@ class CartPage extends StatelessWidget {
                           MaterialPageRoute(
                             builder: (_) => OrderWizard(
                               product: l.product,
-                              initialPicked: l.picked, // mevcut seçimlerle aç
+                              initialPicked: l.picked,
                               editMode: true,
                             ),
                           ),
@@ -991,8 +984,8 @@ class CartPage extends StatelessWidget {
                       icon: const Icon(Icons.delete_outline),
                       onPressed: () => app.removeCartLineAt(i),
                     ),
-  ],
-),
+                  ],
+                ),
               );
             },
           ),
@@ -1307,29 +1300,55 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
+// --- DÜZELTME: GENİŞLETİLMİŞ TEMİZLEME FONKSİYONU ---
 String _sanitize(String s) {
-  final Map<String, String> map = {
-    'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
-    'ş':'s','Ş':'S','ü':'u','Ü':'U',
-    'é':'e','è':'e','ê':'e',
-    'á':'a','à':'a','â':'a',
-    'ô':'o','ù':'u',
-    '€':' EUR ',
-    '–':'-','—':'-','…':'...',
-    '•':'*', 
+  const map = {
+    // Türkçe
+    'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O','ş':'s','Ş':'S','ü':'u','Ü':'U',
+    // Fransızca - aksanlar
+    'é':'e','è':'e','ê':'e','ë':'e','É':'E','È':'E','Ê':'E','Ë':'E',
+    'à':'a','â':'a','ä':'a','À':'A','Â':'A','Ä':'A',
+    'î':'i','ï':'i','Î':'I','Ï':'I',
+    'ô':'o','ö':'o','Ô':'O','Ö':'O',
+    'ù':'u','û':'u','ü':'u','Ù':'U','Û':'U','Ü':'U',
+    'ÿ':'y','Ÿ':'Y',
+    // Ligatürler
+    'œ':'oe','Œ':'OE','æ':'ae','Æ':'AE',
+    // Diğerleri
+    '€':' EUR ', 'º':'o','°':' deg ',
+    '–':'-','—':'-','…':'...'
   };
+
   final b = StringBuffer();
   for (final r in s.runes) {
     final ch = String.fromCharCode(r);
-    b.write(map[ch] ?? ch);
+    if (map.containsKey(ch)) {
+      b.write(map[ch]);
+    } else {
+      b.write(ch);
+    }
   }
-  return b.toString();
+
+  // Kalan non-ASCII karakterleri güvenli hale getir (LF hariç)
+  final out = StringBuffer();
+  for (final r in b.toString().runes) {
+    if (r == 10 /* \n */ || (r >= 32 && r <= 126)) {
+      out.writeCharCode(r);
+    } else {
+      out.write('?'); // son çare
+    }
+  }
+  return out.toString();
 }
 
 Future<void> printOrderAndroid(SavedOrder o) async {
   final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  void writeText(String t) => socket.add(latin1.encode(_sanitize(t)));
+  // --- DÜZELTME: YAZMA FONKSİYONU GÜVENLİ HALE GETİRİLDİ ---
+  void writeText(String t) {
+    final safe = _sanitize(t);
+    socket.add(ascii.encode(safe, allowInvalid: true));
+  }
   void cmd(List<int> bytes) => socket.add(bytes);
 
   cmd([27, 64]);
