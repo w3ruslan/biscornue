@@ -282,6 +282,7 @@ class _HomeState extends State<Home> {
 /* =======================
     PAGE 1 : PRODUITS
     ======================= */
+// --- DÜZELTME 1: KART ORANI GÜNCELLENDİ ---
 class ProductsPage extends StatelessWidget {
   const ProductsPage({super.key});
 
@@ -304,7 +305,7 @@ class ProductsPage extends StatelessWidget {
     int cross = 2;
     if (width > 600) cross = 3;
     if (width > 900) cross = 4;
-    final aspect = width < 500 ? 0.88 : 1.0;
+    final tileRatio = width > 900 ? 1.7 : (width > 600 ? 1.5 : 1.35);
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -312,14 +313,16 @@ class ProductsPage extends StatelessWidget {
         crossAxisCount: cross,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: aspect,
+        childAspectRatio: tileRatio, // <- ÖNEMLİ: daha büyük oran = daha alçak kart
       ),
       itemCount: products.length,
       itemBuilder: (_, i) => _ProductCard(product: products[i]),
     );
   }
 }
+// --- DÜZELTME 1 SONU ---
 
+// --- DÜZELTME 2: KART TASARIMI GÜNCELLENDİ ---
 class _ProductCard extends StatelessWidget {
   final Product product;
   const _ProductCard({super.key, required this.product});
@@ -330,7 +333,8 @@ class _ProductCard extends StatelessWidget {
 
     Future<void> openWizard() async {
       final added = await Navigator.push<bool>(
-        context, MaterialPageRoute(builder: (_) => OrderWizard(product: product)),
+        context,
+        MaterialPageRoute(builder: (_) => OrderWizard(product: product)),
       );
       if (added == true && context.mounted) {
         _snack(context, 'Ajouté au panier.');
@@ -338,55 +342,69 @@ class _ProductCard extends StatelessWidget {
     }
 
     return InkWell(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(20),
       onTap: openWizard,
       child: Ink(
-        decoration: BoxDecoration(color: color.surfaceVariant, borderRadius: BorderRadius.circular(24)),
+        decoration: BoxDecoration(
+          color: color.surfaceVariant,
+          borderRadius: BorderRadius.circular(20),
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Container(
-              height: 56, width: 56,
-              decoration: BoxDecoration(color: color.primary.withOpacity(0.15), borderRadius: BorderRadius.circular(16)),
-              child: Icon(Icons.fastfood_rounded, color: color.primary, size: 32),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              product.name,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const Spacer(),
-            const SizedBox(height: 6), 
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                choisirButton(() => openWizard(), context),
-                IconButton(
-                  tooltip: 'Modifier',
-                  onPressed: () async {
-                    final ok = await _askPin(context);
-                    if (!ok) return;
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => CreateProductPage(
-                          onGoToTab: (_) {},
-                          editIndex: AppScope.of(context).products.indexOf(product),
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.edit_outlined),
+          padding: const EdgeInsets.all(12), // 16 → 12
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                height: 48,  // 56 → 48
+                width: 48,   // 56 → 48
+                decoration: BoxDecoration(
+                  color: color.primary.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(14), // 16 → 14
                 ),
-              ],
-            ),
-            const SizedBox(height: 4),
-          ]),
+                child: Icon(Icons.fastfood_rounded, color: color.primary, size: 28), // 32 → 28
+              ),
+              const SizedBox(height: 12), // 16 → 12
+              Text(
+                product.name,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600), // 18 → 16
+              ),
+              const SizedBox(height: 6), // 8 → 6
+              Text(
+                '${product.groups.length} groupe(s)',
+                style: TextStyle(color: color.onSurfaceVariant),
+              ),
+              const Spacer(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  choisirButton(() => openWizard(), context),
+                  IconButton(
+                    tooltip: 'Modifier',
+                    onPressed: () async {
+                      final ok = await _askPin(context);
+                      if (!ok) return;
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => CreateProductPage(
+                            onGoToTab: (_) {},
+                            editIndex: AppScope.of(context).products.indexOf(product),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
+// --- DÜZELTME 2 SONU ---
 
 /* =======================
     PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
@@ -808,7 +826,6 @@ class _OrderWizardState extends State<OrderWizard> {
   }
 }
 
-// --- YENİ DÜZENLEME: SEÇENEKLER İÇİN IZGARA GÖRÜNÜMÜ ---
 class _GroupStep extends StatelessWidget {
   final OptionGroup group;
   final Map<String, List<OptionItem>> picked;
@@ -816,10 +833,8 @@ class _GroupStep extends StatelessWidget {
   final void Function(OptionGroup, OptionItem) toggleMulti;
 
   const _GroupStep({
-    required this.group,
-    required this.picked,
-    required this.toggleSingle,
-    required this.toggleMulti,
+    required this.group, required this.picked,
+    required this.toggleSingle, required this.toggleMulti,
   });
 
   @override
@@ -827,9 +842,8 @@ class _GroupStep extends StatelessWidget {
     final selectedList = picked[group.id] ?? const <OptionItem>[];
     final cs = Theme.of(context).colorScheme;
 
-    // Ekran genişliğine göre 2–5 arası sütun; üst sınır 5
     final w = MediaQuery.of(context).size.width;
-    final cols = (w ~/ 180).clamp(2, 5); // 180px civarı kutu genişliği
+    final cols = (w ~/ 180).clamp(2, 5);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -851,7 +865,6 @@ class _GroupStep extends StatelessWidget {
               crossAxisCount: cols,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              // kartların yatay uzun görünmesi için
               childAspectRatio: 2.2,
             ),
             itemCount: group.items.length,
@@ -1301,29 +1314,21 @@ Future<String?> _askCustomerName(BuildContext context) async {
   );
 }
 
-// --- DÜZELTME: GELİŞMİŞ SNACKBAR YARDIMCISI ---
-void _snack(BuildContext context, String msg, {int ms = 1200}) {
+void _snack(BuildContext context, String msg) {
   if (!context.mounted) return;
-  final bottomInset = MediaQuery.of(context).padding.bottom;
-  final bottomBar = kBottomNavigationBarHeight; // alt nav yüksekliği (NavigationBar)
-  final bottomMargin = 12 + bottomInset + bottomBar;
-
   ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar() // varsa önceki uyarıyı kapat
-    ..showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        duration: Duration(milliseconds: ms),  // kısa tutuyoruz
-        behavior: SnackBarBehavior.floating,  // yapışık değil, “floating”
-        margin: EdgeInsets.fromLTRB(12, 0, 12, bottomMargin),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        dismissDirection: DismissDirection.horizontal,
-      ),
-    );
+      .showSnackBar(SnackBar(content: Text(msg)));
 }
 
 void _showWarn(BuildContext context, String msg) {
-  _snack(context, msg);
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(msg),
+      duration: const Duration(milliseconds: 1200),
+      behavior: SnackBarBehavior.floating,
+      margin: const EdgeInsets.only(bottom: 72, left: 12, right: 12),
+    ),
+  );
 }
 
 /* =======================
