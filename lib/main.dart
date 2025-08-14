@@ -301,7 +301,6 @@ class ProductsPage extends StatelessWidget {
     int cross = 2;
     if (width > 600) cross = 3;
     if (width > 900) cross = 4;
-    final aspect = width < 500 ? 0.88 : 1.0;
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -309,7 +308,7 @@ class ProductsPage extends StatelessWidget {
         crossAxisCount: cross,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: aspect,
+        childAspectRatio: 0.9, // Önce 1.0’dı
       ),
       itemCount: products.length,
       itemBuilder: (_, i) => _ProductCard(product: products[i]),
@@ -317,6 +316,7 @@ class ProductsPage extends StatelessWidget {
   }
 }
 
+// --- YENİ DÜZENLEME: YUVARLAK KART TASARIMI ---
 class _ProductCard extends StatelessWidget {
   final Product product;
   const _ProductCard({super.key, required this.product});
@@ -327,64 +327,70 @@ class _ProductCard extends StatelessWidget {
 
     Future<void> openWizard() async {
       final added = await Navigator.push<bool>(
-        context, MaterialPageRoute(builder: (_) => OrderWizard(product: product)),
+        context,
+        MaterialPageRoute(builder: (_) => OrderWizard(product: product)),
       );
       if (added == true && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ajouté au panier.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ajouté au panier.')),
+        );
       }
     }
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(24),
-      onTap: openWizard,
-      child: Ink(
-        decoration: BoxDecoration(color: color.surfaceVariant, borderRadius: BorderRadius.circular(24)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Container(
-              height: 56, width: 56,
-              decoration: BoxDecoration(color: color.primary.withOpacity(0.15), borderRadius: BorderRadius.circular(16)),
-              child: Icon(Icons.fastfood_rounded, color: color.primary, size: 32),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              product.name,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const Spacer(),
-            const SizedBox(height: 6), 
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                choisirButton(() => openWizard(), context),
-                IconButton(
-                  tooltip: 'Modifier',
-                  onPressed: () async {
-                    final ok = await _askPin(context);
-                    if (!ok) return;
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => CreateProductPage(
-                          onGoToTab: (_) {},
-                          editIndex: _findProductIndex(context, product),
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-              ],
-            ),
-          ]),
+    // Karta uzun basınca düzenleme (PIN sorar)
+    Future<void> editProduct() async {
+      final ok = await _askPin(context);
+      if (!ok) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CreateProductPage(
+            onGoToTab: (_) {},
+            editIndex: AppScope.of(context).products.indexOf(product),
+          ),
         ),
+      );
+    }
+
+    return InkWell(
+      // yuvarlak kartta ripple için
+      customBorder: const CircleBorder(),
+      onTap: openWizard,
+      onLongPress: editProduct, // kalem yerine uzun bas
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // *** TAM YUVARLAK KART ***
+          Material(
+            color: color.surfaceVariant,
+            shape: const CircleBorder(),
+            elevation: 0,
+            child: SizedBox(
+              width: 140,
+              height: 140,
+              child: Center(
+                child: Icon(Icons.fastfood_rounded,
+                    color: color.primary, size: 48),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            product.name,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${product.groups.length} groupe(s)',
+            style: TextStyle(color: color.onSurfaceVariant),
+          ),
+        ],
       ),
     );
   }
-
-  int _findProductIndex(BuildContext context, Product p) => AppScope.of(context).products.indexOf(p);
 }
+// --- YENİ DÜZENLEME SONU ---
+
 
 /* =======================
     PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
@@ -1263,37 +1269,17 @@ Future<String?> _askCustomerName(BuildContext context) async {
 
 void _snack(BuildContext ctx, String msg) {
   if (ctx.mounted) {
-    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 }
 
 void _showWarn(BuildContext context, String msg) {
-  final bottom = 90 + MediaQuery.of(context).padding.bottom;
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
-      behavior: SnackBarBehavior.floating,
-      margin: EdgeInsets.fromLTRB(12, 0, 12, bottom),
-      duration: const Duration(seconds: 2),
       content: Text(msg),
-    ),
-  );
-}
-
-/* =======================
-    Choisir butonu (kırılma yok)
-    ======================= */
-Widget choisirButton(VoidCallback onTap, BuildContext context) {
-  final color = Theme.of(context).colorScheme;
-  return Material(
-    color: color.primary,
-    shape: const CircleBorder(),
-    child: InkWell(
-      customBorder: const CircleBorder(),
-      onTap: onTap,
-      child: const SizedBox(
-        height: 48, width: 48,
-        child: Icon(Icons.shopping_cart_outlined, color: Colors.white),
-      ),
+      duration: const Duration(milliseconds: 1200),
+      behavior: SnackBarBehavior.floating,
+      margin: const EdgeInsets.only(bottom: 72, left: 12, right: 12),
     ),
   );
 }
@@ -1302,11 +1288,27 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 // YENİ, PAKETSİZ YAZDIRMA YARDIMCILARI
 // ==================================================
 
-// --- Yardımcılar ---
 String _two(int n) => n.toString().padLeft(2, '0');
 
-/// CP1252 (Windows-1252) ile yaz. '€' -> 0x80.
-/// Diğer ASCII dışı karakterler için sanitize + '?'.
+String _money(double v) => '€${v.toStringAsFixed(2)}';
+
+String _rightLine(String left, String right, {int width = 32}) {
+  left = left.replaceAll('\n', ' ');
+  right = right.replaceAll('\n', ' ');
+  if (left.length + right.length > width) {
+    left = left.substring(0, width - right.length);
+  }
+  return left + ' ' * (width - left.length - right.length) + right;
+}
+
+void _cmd(Socket s, List<int> bytes) => s.add(bytes);
+void _boldOn(Socket s)  => _cmd(s, [27, 69, 1]);
+void _boldOff(Socket s) => _cmd(s, [27, 69, 0]);
+void _size(Socket s, int n) => _cmd(s, [29, 33, n]);
+void _alignLeft(Socket s)   => _cmd(s, [27, 97, 0]);
+void _alignCenter(Socket s) => _cmd(s, [27, 97, 1]);
+void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
+
 void _writeCp1252(Socket socket, String text) {
   final out = <int>[];
   for (final r in text.runes) {
@@ -1318,7 +1320,6 @@ void _writeCp1252(Socket socket, String text) {
       out.add(r);
       continue;
     }
-    // sanitize
     final ch = String.fromCharCode(r);
     const repl = {
       'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
@@ -1333,44 +1334,21 @@ void _writeCp1252(Socket socket, String text) {
   socket.add(out);
 }
 
-String _money(double v) => '€${v.toStringAsFixed(2)}';
-
-String _rightLine(String left, String right, {int width = 32}) {
-  left = left.replaceAll('\n', ' ');
-  right = right.replaceAll('\n', ' ');
-  if (left.length + right.length > width) {
-    left = left.substring(0, width - right.length);
-  }
-  return left + ' ' * (width - left.length - right.length) + right;
-}
-
-// --- ESC/POS komut yazımı ---
-void _cmd(Socket s, List<int> bytes) => s.add(bytes);
-void _boldOn(Socket s)  => _cmd(s, [27, 69, 1]);   // ESC E 1
-void _boldOff(Socket s) => _cmd(s, [27, 69, 0]);   // ESC E 0
-void _size(Socket s, int n) => _cmd(s, [29, 33, n]); // GS ! n (0 normal, 16=2x gen, 1=2x yük.)
-void _alignLeft(Socket s)   => _cmd(s, [27, 97, 0]);
-void _alignCenter(Socket s) => _cmd(s, [27, 97, 1]);
-void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
-
 Future<void> printOrderAndroid(SavedOrder o) async {
   final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  // init + codepage CP1252 (Euro sembolü için)
-  _cmd(socket, [27, 64]);      // ESC @
-  _cmd(socket, [27, 116, 16]); // ESC t 16 -> CP1252
+  _cmd(socket, [27, 64]);
+  _cmd(socket, [27, 116, 16]);
 
-  // Başlık
   _alignCenter(socket);
-  _size(socket, 17); // 2x gen + 2x yük (0x11)
+  _size(socket, 17);
   _boldOn(socket);
   _writeCp1252(socket, '*** BISCORNUE ***\n');
   _boldOff(socket);
   _size(socket, 0);
 
-  // MÜŞTERİ – büyük ve kalın
   if (o.customer.isNotEmpty) {
-    _size(socket, 1); // 2x yükseklik
+    _size(socket, 1);
     _boldOn(socket);
     _writeCp1252(socket, 'Client: ${o.customer}\n');
     _boldOff(socket);
@@ -1382,7 +1360,6 @@ Future<void> printOrderAndroid(SavedOrder o) async {
   _alignLeft(socket);
   _writeCp1252(socket, '------------------------------\n');
 
-  // Satırlar
   for (int i = 0; i < o.lines.length; i++) {
     final l = o.lines[i];
     _writeCp1252(socket, 'Item ${i + 1}: ${l.product.name}\n');
@@ -1397,7 +1374,6 @@ Future<void> printOrderAndroid(SavedOrder o) async {
       }
     }
 
-    // Bu ürünün toplamını SAĞA yaz (normal boy)
     _alignRight(socket);
     _writeCp1252(socket, _money(l.total) + '\n');
     _alignLeft(socket);
@@ -1406,16 +1382,14 @@ Future<void> printOrderAndroid(SavedOrder o) async {
 
   _writeCp1252(socket, '------------------------------\n');
 
-  // TOPLAM – sağda, büyük ve kalın
   _alignRight(socket);
   _boldOn(socket);
-  _size(socket, 1); // 2x yükseklik
+  _size(socket, 1);
   _writeCp1252(socket, _rightLine('TOTAL', _money(o.total)) + '\n');
   _size(socket, 0);
   _boldOff(socket);
 
-  // Kesim
-  _cmd(socket, [10, 10, 29, 86, 66, 0]); // feed + partial cut
+  _cmd(socket, [10, 10, 29, 86, 66, 0]);
 
   await socket.flush();
   await socket.close();
