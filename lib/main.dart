@@ -113,6 +113,18 @@ class AppState extends ChangeNotifier {
   void removeCartLineAt(int i) { if (i>=0 && i<cart.length) { cart.removeAt(i); notifyListeners(); } }
   void clearCart() { cart.clear(); notifyListeners(); }
 
+  // --- YENİ FONKSİYON: SEPETTEKİ SATIRI GÜNCELLEME ---
+  void updateCartLineAt(int i, Map<String, List<OptionItem>> picked) {
+    if (i < 0 || i >= cart.length) return;
+    final deep = {
+      for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
+    };
+    final p = cart[i].product;
+    cart[i] = CartLine(product: p, picked: deep);
+    notifyListeners();
+  }
+  // --- YENİ FONKSİYON SONU ---
+
   void finalizeCartToOrder({required String customer}) {
     if (cart.isEmpty) return;
     final deepLines = cart.map((l) => CartLine(
@@ -288,12 +300,18 @@ class ProductsPage extends StatelessWidget {
     }
 
     final width = MediaQuery.of(context).size.width;
-    int cross = 2; if (width > 600) cross = 3; if (width > 900) cross = 4;
+    int cross = 2;
+    if (width > 600) cross = 3;
+    if (width > 900) cross = 4;
+    final aspect = width < 500 ? 0.88 : 1.0;
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: cross, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 1,
+        crossAxisCount: cross,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: aspect,
       ),
       itemCount: products.length,
       itemBuilder: (_, i) => _ProductCard(product: products[i]),
@@ -662,9 +680,19 @@ class _OptionEditorState extends State<_OptionEditor> {
 /* =======================
     WIZARD (BUTONLAR İÇERİKTE, BİRAZ DAHA YUKARIDA)
     ======================= */
+// --- YENİ DÜZENLEME MODU PARAMETRELERİ ---
 class OrderWizard extends StatefulWidget {
   final Product product;
-  const OrderWizard({super.key, required this.product});
+  final Map<String, List<OptionItem>>? initialPicked; // mevcut seçimler
+  final bool editMode;                                // düzenleme mi?
+
+  const OrderWizard({
+    super.key,
+    required this.product,
+    this.initialPicked,
+    this.editMode = false,
+  });
+
   @override
   State<OrderWizard> createState() => _OrderWizardState();
 }
@@ -672,6 +700,17 @@ class OrderWizard extends StatefulWidget {
 class _OrderWizardState extends State<OrderWizard> {
   int step = 0;
   final Map<String, List<OptionItem>> picked = {};
+
+  // --- YENİ: DÜZENLEME MODU İÇİN MEVCUT SEÇİMLERİ YÜKLE ---
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialPicked != null) {
+      for (final e in widget.initialPicked!.entries) {
+        picked[e.key] = List<OptionItem>.from(e.value);
+      }
+    }
+  }
 
   void _toggleSingle(OptionGroup g, OptionItem it) { picked[g.id] = [it]; setState(() {}); }
   void _toggleMulti(OptionGroup g, OptionItem it) {
@@ -711,7 +750,6 @@ class _OrderWizardState extends State<OrderWizard> {
                 ? _Summary(product: widget.product, picked: picked, total: total)
                 : _GroupStep(group: groups[step], picked: picked, toggleSingle: _toggleSingle, toggleMulti: _toggleMulti),
           ),
-          // Butonlar içerikte, SafeArea ile; alt çubuktan daha yukarı durur
           SafeArea(
             top: false,
             child: Padding(
@@ -724,10 +762,20 @@ class _OrderWizardState extends State<OrderWizard> {
                 const SizedBox(width: 12),
                 Expanded(child: FilledButton(
                   onPressed: () {
+                    // --- YENİ: DÜZENLEME MODU İÇİN BUTON DAVRANIŞI ---
                     if (isSummary) {
-                      final app = AppScope.of(context);
-                      app.addLineToCart(widget.product, picked);
-                      if (!mounted) return; Navigator.pop(context, true); return;
+                      final result = {
+                        for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
+                      };
+                      if (widget.editMode) {
+                        // düzenlemede yeni seçimleri geri döndür
+                        Navigator.pop(context, result);
+                      } else {
+                        // normal ekleme
+                        AppScope.of(context).addLineToCart(widget.product, picked);
+                        Navigator.pop(context, true);
+                      }
+                      return;
                     }
                     final g = groups[step];
                     if (!_validGroup(g)) {
@@ -738,7 +786,12 @@ class _OrderWizardState extends State<OrderWizard> {
                     }
                     setState(() => step++);
                   },
-                  child: Text(isSummary ? 'Ajouter au panier' : 'Suivant'),
+                  // --- YENİ: DÜZENLEME MODU İÇİN BUTON ETİKETİ ---
+                  child: Text(
+                    isSummary
+                        ? (widget.editMode ? 'Mettre à jour' : 'Ajouter au panier')
+                        : 'Suivant',
+                  ),
                 )),
               ]),
             ),
@@ -905,7 +958,41 @@ class CartPage extends StatelessWidget {
                       ],
                   ],
                 ),
-                trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => app.removeCartLineAt(i)),
+                // --- YENİ: DÜZENLE VE SİL BUTONLARI ---
+                trailing: Wrap(
+                  spacing: 4,
+                  children: [
+                    IconButton(
+                      tooltip: 'Düzenle',
+                      icon: const Icon(Icons.edit_outlined),
+                      onPressed: () async {
+                        final result = await Navigator.push<Map<String, List<OptionItem>>>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => OrderWizard(
+                              product: l.product,
+                              initialPicked: l.picked, // mevcut seçimlerle aç
+                              editMode: true,
+                            ),
+                          ),
+                        );
+                        if (result != null) {
+                          app.updateCartLineAt(i, result);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Satır güncellendi.')),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                    IconButton(
+                      tooltip: 'Sil',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => app.removeCartLineAt(i),
+                    ),
+  ],
+),
               );
             },
           ),
@@ -1221,7 +1308,6 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 String _two(int n) => n.toString().padLeft(2, '0');
 
 String _sanitize(String s) {
-  // ESC/POS çoğunlukla ASCII; TR/FR karakterleri sadeleştir
   final Map<String, String> map = {
     'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
     'ş':'s','Ş':'S','ü':'u','Ü':'U',
@@ -1230,7 +1316,7 @@ String _sanitize(String s) {
     'ô':'o','ù':'u',
     '€':' EUR ',
     '–':'-','—':'-','…':'...',
-    '•':'*', // madde işareti hatasını da önler
+    '•':'*', 
   };
   final b = StringBuffer();
   for (final r in s.runes) {
@@ -1246,16 +1332,14 @@ Future<void> printOrderAndroid(SavedOrder o) async {
   void writeText(String t) => socket.add(latin1.encode(_sanitize(t)));
   void cmd(List<int> bytes) => socket.add(bytes);
 
-  // ESC @ (init)
   cmd([27, 64]);
 
-  // Başlık merkez
-  cmd([27, 97, 1]); // ESC a 1 (center)
+  cmd([27, 97, 1]); 
   writeText('*** BISCORNUE ***\n');
   if (o.customer.isNotEmpty) writeText('Client: ${o.customer}\n');
   final d = o.createdAt;
   writeText('${_two(d.day)}/${_two(d.month)}/${d.year} ${_two(d.hour)}:${_two(d.minute)}\n');
-  cmd([27, 97, 0]); // sola dön
+  cmd([27, 97, 0]); 
   writeText('------------------------------\n');
 
   for (int i = 0; i < o.lines.length; i++) {
@@ -1271,15 +1355,14 @@ Future<void> printOrderAndroid(SavedOrder o) async {
         }
       }
     }
-    writeText('\n');
+    writeText('  --> €${l.total.toStringAsFixed(2)}\n');
+    writeText('\n'); 
   }
 
   writeText('------------------------------\n');
   writeText('TOTAL: ${o.total.toStringAsFixed(2)} EUR\n');
 
-  // 4 satır besle (ESC d n)
   cmd([27, 100, 4]);
-  // kısmi kes (GS V 66 0)
   cmd([29, 86, 66, 0]);
 
   await socket.flush();
