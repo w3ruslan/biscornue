@@ -300,11 +300,9 @@ class ProductsPage extends StatelessWidget {
       );
     }
 
-    final width = MediaQuery.of(context).size.width;
-    int cross = 2;
-    if (width > 600) cross = 3;
-    if (width > 900) cross = 4;
-    final tileRatio = width > 900 ? 1.7 : (width > 600 ? 1.5 : 1.35);
+    final w = MediaQuery.of(context).size.width;
+    final cross = w >= 900 ? 4 : (w >= 600 ? 3 : 2);
+    final itemRatio = w < 500 ? 0.78 : 0.90;
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -312,7 +310,7 @@ class ProductsPage extends StatelessWidget {
         crossAxisCount: cross,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: tileRatio,
+        childAspectRatio: itemRatio,
       ),
       itemCount: products.length,
       itemBuilder: (_, i) => _ProductCard(product: products[i]),
@@ -320,7 +318,6 @@ class ProductsPage extends StatelessWidget {
   }
 }
 
-// --- DÜZELTME: KART TASARIMI GÜNCELLENDİ (KOMPAKT) ---
 class _ProductCard extends StatelessWidget {
   final Product product;
   const _ProductCard({super.key, required this.product});
@@ -340,75 +337,70 @@ class _ProductCard extends StatelessWidget {
     }
 
     return InkWell(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(24),
       onTap: openWizard,
       child: Ink(
         decoration: BoxDecoration(
           color: color.surfaceVariant,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
         ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                children: [
-                  Container(
-                    height: 48,
-                    width: 48,
-                    decoration: BoxDecoration(
-                      color: color.primary.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Icon(Icons.fastfood_rounded, color: color.primary, size: 28),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 220),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 56, width: 56,
+                  decoration: BoxDecoration(
+                    color: color.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  const SizedBox(height: 12),
-                  Text(product.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  Text('${product.groups.length} groupe(s)',
-                      style: TextStyle(color: color.onSurfaceVariant)),
-                ],
-              ),
-              Row(
-                children: [
-                  FilledButton(
-                    onPressed: openWizard,
-                    style: FilledButton.styleFrom(
-                      shape: const CircleBorder(),
-                      minimumSize: const Size(44, 44),
-                      padding: EdgeInsets.zero,
-                    ),
-                    child: const Icon(Icons.shopping_cart_outlined, size: 20),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () async {
-                      final ok = await _askPin(context);
-                      if (!ok) return;
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
+                  child: Icon(Icons.fastfood_rounded, color: color.primary, size: 32),
+                ),
+                const SizedBox(height: 16),
+                Text(product.name,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Text('${product.groups.length} groupe(s)',
+                    style: TextStyle(color: color.onSurfaceVariant)),
+
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    choisirButton(() => openWizard(), context),
+                    IconButton(
+                      tooltip: 'Modifier',
+                      onPressed: () async {
+                        final ok = await _askPin(context);
+                        if (!ok) return;
+                        Navigator.of(context).push(MaterialPageRoute(
                           builder: (_) => CreateProductPage(
                             onGoToTab: (_) {},
-                            editIndex: AppScope.of(context).products.indexOf(product),
+                            editIndex: _findProductIndex(context, product),
                           ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-                  ),
-                ],
-              ),
-            ],
+                        ));
+                      },
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  int _findProductIndex(BuildContext context, Product p) {
+    return AppScope.of(context).products.indexOf(p);
+  }
 }
-// --- DÜZELTME SONU ---
+
 
 /* =======================
     PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
@@ -708,16 +700,7 @@ class _OptionEditorState extends State<_OptionEditor> {
     ======================= */
 class OrderWizard extends StatefulWidget {
   final Product product;
-  final Map<String, List<OptionItem>>? initialPicked;
-  final bool editMode;
-
-  const OrderWizard({
-    super.key,
-    required this.product,
-    this.initialPicked,
-    this.editMode = false,
-  });
-
+  const OrderWizard({super.key, required this.product});
   @override
   State<OrderWizard> createState() => _OrderWizardState();
 }
@@ -725,16 +708,6 @@ class OrderWizard extends StatefulWidget {
 class _OrderWizardState extends State<OrderWizard> {
   int step = 0;
   final Map<String, List<OptionItem>> picked = {};
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.initialPicked != null) {
-      for (final e in widget.initialPicked!.entries) {
-        picked[e.key] = List<OptionItem>.from(e.value);
-      }
-    }
-  }
 
   void _toggleSingle(OptionGroup g, OptionItem it) { picked[g.id] = [it]; setState(() {}); }
   void _toggleMulti(OptionGroup g, OptionItem it) {
@@ -761,67 +734,48 @@ class _OrderWizardState extends State<OrderWizard> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            if (isSummary) {
-              setState(() => step = groups.isEmpty ? 0 : groups.length - 1);
-            } else if (step > 0) {
-              setState(() => step--);
-            } else {
-              Navigator.pop(context);
-            }
+            if (isSummary) { setState(() => step = groups.isEmpty ? 0 : groups.length - 1); }
+            else if (step > 0) { setState(() => step--); }
+            else { Navigator.pop(context); }
           },
         ),
       ),
-      body: Stack(
+      body: Column(
         children: [
-          Positioned.fill(
+          Expanded(
             child: isSummary
                 ? _Summary(product: widget.product, picked: picked, total: total)
-                : _GroupStep(
-                    group: groups[step],
-                    picked: picked,
-                    toggleSingle: _toggleSingle,
-                    toggleMulti: _toggleMulti,
-                  ),
+                : _GroupStep(group: groups[step], picked: picked, toggleSingle: _toggleSingle, toggleMulti: _toggleMulti),
           ),
-          Positioned(
-            left: 16,
-            bottom: 16 + MediaQuery.of(context).padding.bottom,
-            child: FloatingActionButton.large(
-              heroTag: 'prevFab',
-              onPressed: step == 0
-                  ? null
-                  : () => setState(() => step--),
-              child: const Icon(Icons.arrow_back),
-            ),
-          ),
-          Positioned(
-            right: 16,
-            bottom: 16 + MediaQuery.of(context).padding.bottom,
-            child: FloatingActionButton.large(
-              heroTag: 'nextFab',
-              onPressed: () {
-                if (isSummary) {
-                  if (widget.editMode) {
-                    final result = {
-                      for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
-                    };
-                    Navigator.pop(context, result);
-                  } else {
-                    final app = AppScope.of(context);
-                    app.addLineToCart(widget.product, picked);
-                    if (!mounted) return;
-                    Navigator.pop(context, true);
-                  }
-                  return;
-                }
-                final g = groups[step];
-                if (!_validGroup(g)) {
-                  _showWarn(context, 'Sélection invalide pour "${g.title}".');
-                  return;
-                }
-                setState(() => step++);
-              },
-              child: Icon(isSummary ? (widget.editMode ? Icons.check : Icons.add_shopping_cart) : Icons.arrow_forward),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              child: Row(children: [
+                Expanded(child: OutlinedButton(
+                  onPressed: step == 0 ? null : () => setState(() => step--),
+                  child: const Text('Précédent'),
+                )),
+                const SizedBox(width: 12),
+                Expanded(child: FilledButton(
+                  onPressed: () {
+                    if (isSummary) {
+                      final app = AppScope.of(context);
+                      app.addLineToCart(widget.product, picked);
+                      if (!mounted) return; Navigator.pop(context, true); return;
+                    }
+                    final g = groups[step];
+                    if (!_validGroup(g)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Sélection invalide pour "${g.title}".')),
+                      );
+                      return;
+                    }
+                    setState(() => step++);
+                  },
+                  child: Text(isSummary ? 'Ajouter au panier' : 'Suivant'),
+                )),
+              ]),
             ),
           ),
         ],
@@ -843,102 +797,53 @@ class _GroupStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedList = picked[group.id] ?? const <OptionItem>[];
-    final cs = Theme.of(context).colorScheme;
+    final list = picked[group.id] ?? const [];
+    final color = Theme.of(context).colorScheme;
 
-    final w = MediaQuery.of(context).size.width;
-    final cols = (w ~/ 180).clamp(2, 5);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-          child: Text(
-            group.title +
-                (group.multiple
-                    ? '  (min ${group.minSelect}, max ${group.maxSelect})'
-                    : ''),
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-        ),
-        Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: cols,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 2.2,
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemCount: group.items.length + 1,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (_, i) {
+        if (i == 0) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Text(
+              group.title + (group.multiple ? ' (min ${group.minSelect}, max ${group.maxSelect})' : ''),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            itemCount: group.items.length,
-            itemBuilder: (_, i) {
-              final it = group.items[i];
-              final isSelected = selectedList.any((e) => e.id == it.id);
+          );
+        }
+        final it = group.items[i - 1];
+        final selected = list.any((e) => e.id == it.id);
 
-              void onTap() => group.multiple
-                  ? toggleMulti(group, it)
-                  : toggleSingle(group, it);
-
-              return InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(18),
-                child: Ink(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    color: isSelected
-                        ? cs.primaryContainer
-                        : cs.surfaceVariant,
-                    border: Border.all(
-                      color: isSelected ? cs.primary : cs.outlineVariant,
-                      width: 1.2,
-                    ),
-                  ),
-                  child: Stack(
-                    children: [
-                      Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              it.label,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (it.price != 0)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  '+ ${it.price.toStringAsFixed(2)} €',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: cs.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      if (isSelected)
-                        Positioned(
-                          right: 8,
-                          top: 8,
-                          child: Icon(Icons.check_circle,
-                              size: 18, color: cs.primary),
-                        ),
-                    ],
-                  ),
+        return InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => group.multiple ? toggleMulti(group, it) : toggleSingle(group, it),
+          child: Ink(
+            decoration: BoxDecoration(
+              color: selected ? color.primaryContainer : color.surfaceVariant,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: selected ? color.primary : color.outlineVariant),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              child: Row(children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(it.label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    if (it.price != 0)
+                      Text('+ €${it.price.toStringAsFixed(2)}', style: TextStyle(color: color.onSurfaceVariant)),
+                  ]),
                 ),
-              );
-            },
+                group.multiple
+                    ? Checkbox(value: selected, onChanged: (_) => toggleMulti(group, it))
+                    : Radio<bool>(value: true, groupValue: selected, onChanged: (_) => toggleSingle(group, it)),
+              ]),
+            ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
@@ -1035,38 +940,7 @@ class CartPage extends StatelessWidget {
                       ],
                   ],
                 ),
-                trailing: Wrap(
-                  spacing: 4,
-                  children: [
-                    IconButton(
-                      tooltip: 'Düzenle',
-                      icon: const Icon(Icons.edit_outlined),
-                      onPressed: () async {
-                        final result = await Navigator.push<Map<String, List<OptionItem>>>(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => OrderWizard(
-                              product: l.product,
-                              initialPicked: l.picked,
-                              editMode: true,
-                            ),
-                          ),
-                        );
-                        if (result != null) {
-                          app.updateCartLineAt(i, result);
-                          if (context.mounted) {
-                            _snack(context, 'Satır güncellendi.');
-                          }
-                        }
-                      },
-                    ),
-                    IconButton(
-                      tooltip: 'Sil',
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () => app.removeCartLineAt(i),
-                    ),
-                  ],
-                ),
+                trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => app.removeCartLineAt(i)),
               );
             },
           ),
@@ -1087,7 +961,9 @@ class CartPage extends StatelessWidget {
               if (name == null) return;
               AppScope.of(context).finalizeCartToOrder(customer: name);
               if (context.mounted) {
-                _snack(context, 'Commande validée pour "$name".');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Commande validée pour "$name".')),
+                );
               }
             },
             icon: const Icon(Icons.check),
@@ -1126,7 +1002,6 @@ class OrdersPage extends StatelessWidget {
           child: Row(children: [
             const Text('Commandes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Spacer(),
-            const SizedBox(width: 8),
             TextButton.icon(
               onPressed: () async {
                 final pinOk = await _askPin(context); if (!pinOk) return;
@@ -1169,9 +1044,17 @@ class OrdersPage extends StatelessWidget {
                   onPressed: () async {
                     try {
                       await printOrderAndroid(o);
-                      _snack(context, 'Fiş yazıcıya gönderildi.');
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Fiş yazıcıya gönderildi.')),
+                        );
+                      }
                     } catch (e) {
-                      _snack(context, 'Yazdırma hatası: $e');
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Yazdırma hatası: $e')),
+                        );
+                      }
                     }
                   },
                   tooltip: 'Imprimer',
@@ -1225,10 +1108,16 @@ class OrdersPage extends StatelessWidget {
                               await printOrderAndroid(o);
                               if (context.mounted) {
                                 Navigator.pop(context); // Diyalogu kapat
-                                _snack(context, 'Fiş yazıcıya gönderildi.');
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Fiş yazıcıya gönderildi.')),
+                                );
                               }
                             } catch (e) {
-                               _snack(context, 'Yazdırma hatası: $e');
+                               if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Yazdırma hatası: $e')),
+                                );
+                              }
                             }
                           },
                           child: const Text('Imprimer'),
@@ -1266,9 +1155,7 @@ Future<bool> _askPin(BuildContext context) async {
       ],
     ),
   );
-  if (ok != true) {
-    _snack(context, 'Code incorrect.');
-  }
+  if (ok != true && context.mounted) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code incorrect.'))); }
   return ok == true;
 }
 
@@ -1319,37 +1206,44 @@ Future<String?> _askCustomerName(BuildContext context) async {
 }
 
 void _snack(BuildContext context, String msg) {
-  if (!context.mounted) return;
-  ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(msg)));
-}
-
-void _showWarn(BuildContext context, String msg) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(msg),
-      duration: const Duration(milliseconds: 1200),
-      behavior: SnackBarBehavior.floating,
-      margin: const EdgeInsets.only(bottom: 72, left: 12, right: 12),
-    ),
-  );
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
 }
 
 /* =======================
     Choisir butonu (kırılma yok)
     ======================= */
 Widget choisirButton(VoidCallback onTap, BuildContext context) {
-  final color = Theme.of(context).colorScheme;
-  return Material(
-    color: color.primary,
-    shape: const CircleBorder(),
-    child: InkWell(
-      customBorder: const CircleBorder(),
-      onTap: onTap,
-      child: const SizedBox(
-        height: 48, width: 48,
-        child: Icon(Icons.shopping_cart_outlined, color: Colors.white),
+  final w = MediaQuery.of(context).size.width;
+  final isTiny = w < 360; // çok dar telefonlar
+
+  if (isTiny) {
+    return FilledButton.icon(
+      onPressed: onTap,
+      icon: const Icon(Icons.shopping_cart_outlined, size: 20),
+      label: const SizedBox.shrink(),
+      style: FilledButton.styleFrom(
+        shape: const StadiumBorder(),
+        minimumSize: const Size(56, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       ),
+    );
+  }
+
+  return FilledButton.icon(
+    onPressed: onTap,
+    icon: const Icon(Icons.shopping_cart_outlined, size: 20),
+    label: const Text(
+      'Choisir',
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.fade,
+    ),
+    style: FilledButton.styleFrom(
+      shape: const StadiumBorder(),
+      minimumSize: const Size(120, 44),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
     ),
   );
 }
@@ -1360,107 +1254,60 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
-String _money(double v) =>
-    '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
-
-String _rightLine(String left, String right, {int width = 32}) {
-  left = left.replaceAll('\n', ' ');
-  right = right.replaceAll('\n', ' ');
-  if (left.length + right.length > width) {
-    left = left.substring(0, width - right.length);
-  }
-  return left + ' ' * (width - left.length - right.length) + right;
-}
-
-void _cmd(Socket s, List<int> bytes) => s.add(bytes);
-void _boldOn(Socket s)  => _cmd(s, [27, 69, 1]);
-void _boldOff(Socket s) => _cmd(s, [27, 69, 0]);
-void _size(Socket s, int n) => _cmd(s, [29, 33, n]);
-void _alignLeft(Socket s)   => _cmd(s, [27, 97, 0]);
-void _alignCenter(Socket s) => _cmd(s, [27, 97, 1]);
-void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
-
-void _writeCp1252(Socket socket, String text) {
-  final out = <int>[];
-  for (final r in text.runes) {
-    if (r == 0x20AC) { // €
-      out.add(0x80);
-      continue;
-    }
-    if (r <= 0x7F) { // ASCII
-      out.add(r);
-      continue;
-    }
+String _sanitize(String s) {
+  // ESC/POS çoğunlukla ASCII; TR/FR karakterleri sadeleştir
+  const map = {
+    'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
+    'ş':'s','Ş':'S','ü':'u','Ü':'U','é':'e','è':'e','ê':'e','á':'a','à':'a','â':'a',
+    'ô':'o','ù':'u','€':' EUR ','–':'-','—':'-','…':'...'
+  };
+  final b = StringBuffer();
+  for (final r in s.runes) {
     final ch = String.fromCharCode(r);
-    const repl = {
-      'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
-      'ş':'s','Ş':'S','ü':'u','Ü':'U','é':'e','è':'e','ê':'e','á':'a','à':'a','â':'a',
-      'ô':'o','ù':'u','–':'-','—':'-','…':'...',
-    };
-    final s = repl[ch] ?? '?';
-    for (final cu in s.codeUnits) {
-      if (cu == 0x20AC) { out.add(0x80); } else { out.add(cu <= 0x7F ? cu : 0x3F); }
-    }
+    b.write(map[ch] ?? ch);
   }
-  socket.add(out);
+  return b.toString();
 }
 
 Future<void> printOrderAndroid(SavedOrder o) async {
   final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  _cmd(socket, [27, 64]);
-  _cmd(socket, [27, 116, 16]);
+  void writeText(String t) => socket.add(ascii.encode(_sanitize(t)));
+  void cmd(List<int> bytes) => socket.add(bytes);
 
-  _alignCenter(socket);
-  _size(socket, 17);
-  _boldOn(socket);
-  _writeCp1252(socket, '*** BISCORNUE ***\n');
-  _boldOff(socket);
-  _size(socket, 0);
+  // ESC @ (init)
+  cmd([27, 64]);
 
-  if (o.customer.isNotEmpty) {
-    _size(socket, 1);
-    _boldOn(socket);
-    _writeCp1252(socket, 'Client: ${o.customer}\n');
-    _boldOff(socket);
-    _size(socket, 0);
-  }
-
+  // Başlık merkez
+  cmd([27, 97, 1]); // ESC a 1 (center)
+  writeText('*** BISCORNUE ***\n');
+  if (o.customer.isNotEmpty) writeText('Client: ${o.customer}\n');
   final d = o.createdAt;
-  _writeCp1252(socket, '${_two(d.day)}/${_two(d.month)}/${d.year} ${_two(d.hour)}:${_two(d.minute)}\n');
-  _alignLeft(socket);
-  _writeCp1252(socket, '------------------------------\n');
+  writeText('${_two(d.day)}/${_two(d.month)}/${d.year} ${_two(d.hour)}:${_two(d.minute)}\n');
+  cmd([27, 97, 0]); // sola dön
+  writeText('------------------------------\n');
 
   for (int i = 0; i < o.lines.length; i++) {
     final l = o.lines[i];
-    _writeCp1252(socket, 'Item ${i + 1}: ${l.product.name}\n');
+    writeText('Item ${i + 1}: ${l.product.name}\n');
     for (final g in l.product.groups) {
       final sel = l.picked[g.id] ?? const <OptionItem>[];
       if (sel.isNotEmpty) {
-        _writeCp1252(socket, '  ${g.title}:\n');
+        writeText('  ${g.title}:\n');
         for (final it in sel) {
-          final p = it.price == 0 ? '' : ' (+${_money(it.price)})';
-          _writeCp1252(socket, '    * ${it.label}$p\n');
+          final p = it.price == 0 ? '' : ' (+${it.price.toStringAsFixed(2)} EUR)';
+          writeText('    • ${it.label}$p\n');
         }
       }
     }
-
-    _alignRight(socket);
-    _writeCp1252(socket, _money(l.total) + '\n');
-    _alignLeft(socket);
-    _writeCp1252(socket, '\n');
+    writeText('\n');
   }
 
-  _writeCp1252(socket, '------------------------------\n');
+  writeText('------------------------------\n');
+  writeText('TOTAL: ${o.total.toStringAsFixed(2)} EUR\n');
 
-  _alignRight(socket);
-  _boldOn(socket);
-  _size(socket, 1);
-  _writeCp1252(socket, _rightLine('TOTAL', _money(o.total)) + '\n');
-  _size(socket, 0);
-  _boldOff(socket);
-
-  _cmd(socket, [10, 10, 29, 86, 66, 0]);
+  // 2 satır besle + kısmi kes (GS V 66 0) — çoğu Epson’da çalışır
+  cmd([10, 10, 29, 86, 66, 0]);
 
   await socket.flush();
   await socket.close();
