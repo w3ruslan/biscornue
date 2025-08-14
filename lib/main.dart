@@ -232,10 +232,9 @@ class _HomeState extends State<Home> {
     final totalCart = app.cart.fold(0.0, (s, l) => s + l.total);
     final cartBadge = app.cart.length;
 
-    // --- DÜZELTME: 'onToTab' YAZIM HATASI GİDERİLDİ ---
     final pages = [
       const ProductsPage(),
-      CreateProductPage(onGoToTab: (i) => setState(() => index = i)), // <-- DÜZELTİLDİ
+      CreateProductPage(onGoToTab: (i) => setState(() => index = i)),
       const CartPage(),
       const OrdersPage(),
     ];
@@ -268,8 +267,15 @@ class _HomeState extends State<Home> {
           ),
           const NavigationDestination(icon: Icon(Icons.receipt_long), label: 'Commandes'),
         ],
+        // --- DÜZELTME: SEPETE GİDERKEN UYARIYI KAPAT ---
         onDestinationSelected: (i) async {
-          if (i == 1) { final ok = await _askPin(context); if (!ok) return; }
+          if (i == 1) { 
+            final ok = await _askPin(context); 
+            if (!ok) return; 
+          }
+          if (i == 2) { // Panier’e gidiyoruz
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          }
           setState(() => index = i);
         },
       ),
@@ -1285,6 +1291,7 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 // YENİ, PAKETSİZ YAZDIRMA YARDIMCILARI
 // ==================================================
 
+// 2 haneli sıfır doldurma: 5 -> "05"
 String _two(int n) => n.toString().padLeft(2, '0');
 
 String _money(double v) =>
@@ -1390,5 +1397,4 @@ Future<void> printOrderAndroid(SavedOrder o) async {
   _cmd(socket, [10, 10, 29, 86, 66, 0]);
 
   await socket.flush();
-  await socket.close();
-}
+  await socket.close()
