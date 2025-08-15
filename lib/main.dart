@@ -18,6 +18,7 @@ const String _ADMIN_PIN = '6538';
     ======================= */
 void main() {
   final appState = AppState();
+  appState.loadSettings(); // Ayarları yükle
   runApp(AppScope(notifier: appState, child: const App()));
 }
 
@@ -86,11 +87,14 @@ class CartLine {
 class SavedOrder {
   final String id;
   final DateTime createdAt;
+  final DateTime readyAt;        // YENİ
   final List<CartLine> lines;
-  final String customer; // müşteri adı
+  final String customer;
+  
   SavedOrder({
     required this.id,
     required this.createdAt,
+    required this.readyAt,       // YENİ
     required this.lines,
     required this.customer,
   });
@@ -101,6 +105,20 @@ class AppState extends ChangeNotifier {
   final List<Product> products = [];
   final List<CartLine> cart = [];
   final List<SavedOrder> orders = [];
+  int prepMinutes = 5;
+
+  Future<void> loadSettings() async {
+    final sp = await SharedPreferences.getInstance();
+    prepMinutes = sp.getInt('prepMinutes') ?? 5;
+    notifyListeners();
+  }
+
+  Future<void> setPrepMinutes(int m) async {
+    prepMinutes = m;
+    final sp = await SharedPreferences.getInstance();
+    await sp.setInt('prepMinutes', m);
+    notifyListeners();
+  }
 
   void addProduct(Product p) { products.add(p); notifyListeners(); }
   void replaceProductAt(int i, Product p) { products[i] = p; notifyListeners(); }
@@ -129,9 +147,14 @@ class AppState extends ChangeNotifier {
       product: l.product,
       picked: { for (final e in l.picked.entries) e.key: List<OptionItem>.from(e.value) },
     )).toList();
+
+    final now   = DateTime.now();
+    final ready = now.add(Duration(minutes: prepMinutes));
+
     orders.add(SavedOrder(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      createdAt: DateTime.now(),
+      id: now.millisecondsSinceEpoch.toString(),
+      createdAt: now,
+      readyAt: ready,                 // YENİ
       lines: deepLines,
       customer: customer,
     ));
@@ -304,7 +327,7 @@ class ProductsPage extends StatelessWidget {
     int cross = 2;
     if (width > 600) cross = 3;
     if (width > 900) cross = 4;
-    final aspect = width > 900 ? 0.9 : (width > 600 ? 0.95 : 0.88);
+    final tileRatio = width > 900 ? 1.7 : (width > 600 ? 1.5 : 1.35);
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -312,7 +335,7 @@ class ProductsPage extends StatelessWidget {
         crossAxisCount: cross,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: aspect,
+        childAspectRatio: tileRatio,
       ),
       itemCount: products.length,
       itemBuilder: (_, i) => _ProductCard(product: products[i]),
@@ -320,7 +343,6 @@ class ProductsPage extends StatelessWidget {
   }
 }
 
-// --- YENİ DÜZENLEME: STACK TABANLI KART TASARIMI ---
 class _ProductCard extends StatelessWidget {
   final Product product;
   const _ProductCard({super.key, required this.product});
@@ -340,64 +362,69 @@ class _ProductCard extends StatelessWidget {
     }
 
     return InkWell(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(20),
       onTap: openWizard,
       child: Ink(
         decoration: BoxDecoration(
-          color: color.surfaceVariant, borderRadius: BorderRadius.circular(24),
+          color: color.surfaceVariant,
+          borderRadius: BorderRadius.circular(20),
         ),
-        child: Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
                 children: [
                   Container(
-                    height: 56, width: 56,
+                    height: 48,
+                    width: 48,
                     decoration: BoxDecoration(
                       color: color.primary.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(14),
                     ),
-                    child: Icon(Icons.fastfood_rounded, color: color.primary, size: 32),
+                    child: Icon(Icons.fastfood_rounded, color: color.primary, size: 28),
                   ),
                   const SizedBox(height: 12),
-                  Text(product.name,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text('${product.groups.length} groupe(s)'),
-                  const SizedBox(height: 8),
+                  Text(product.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  Text('${product.groups.length} groupe(s)',
+                      style: TextStyle(color: color.onSurfaceVariant)),
                 ],
               ),
-            ),
-            Positioned(
-              left: 12,
-              bottom: 12,
-              child: choisirButton(() => openWizard(), context),
-            ),
-            Positioned(
-              right: 8,
-              bottom: 8,
-              child: IconButton(
-                tooltip: 'Modifier',
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: () async {
-                  final ok = await _askPin(context);
-                  if (!ok) return;
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => CreateProductPage(
-                        onGoToTab: (_) {},
-                        editIndex: AppScope.of(context).products.indexOf(product),
-                      ),
+              Row(
+                children: [
+                  FilledButton(
+                    onPressed: openWizard,
+                    style: FilledButton.styleFrom(
+                      shape: const CircleBorder(),
+                      minimumSize: const Size(44, 44),
+                      padding: EdgeInsets.zero,
                     ),
-                  );
-                },
+                    child: const Icon(Icons.shopping_cart_outlined, size: 20),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () async {
+                      final ok = await _askPin(context);
+                      if (!ok) return;
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => CreateProductPage(
+                            onGoToTab: (_) {},
+                            editIndex: AppScope.of(context).products.indexOf(product),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                  ),
+                ],
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -419,6 +446,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
   final TextEditingController nameCtrl = TextEditingController(text: 'Sandwich');
   final List<OptionGroup> editingGroups = [];
   int? editingIndex;
+  final TextEditingController delayCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -426,6 +454,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
     editingIndex = widget.editIndex;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (editingIndex != null) _loadForEdit(editingIndex!);
+      final app = AppScope.of(context);
+      delayCtrl.text = app.prepMinutes.toString();
     });
   }
 
@@ -493,6 +523,42 @@ class _CreateProductPageState extends State<CreateProductPage> {
           ),
         ]),
         const SizedBox(height: 12),
+
+        Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                const Icon(Icons.timer_outlined),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: delayCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Délai de préparation (minutes)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () {
+                    final m = int.tryParse(delayCtrl.text.trim());
+                    if (m == null || m < 0) {
+                      _snack(context, 'Valeur invalide.');
+                      return;
+                    }
+                    app.setPrepMinutes(m);
+                    _snack(context, 'Délai enregistré: $m min');
+                  },
+                  child: const Text('Enregistrer'),
+                ),
+              ],
+            ),
+          ),
+        ),
 
         if (app.products.isNotEmpty) ...[
           const Text('Produits existants', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -1143,9 +1209,12 @@ class CartPage extends StatelessWidget {
             onPressed: () async {
               final name = await _askCustomerName(context);
               if (name == null) return;
-              AppScope.of(context).finalizeCartToOrder(customer: name);
+              final app = AppScope.of(context);
+              final ready = DateTime.now().add(Duration(minutes: app.prepMinutes));
+              app.finalizeCartToOrder(customer: name);
               if (context.mounted) {
-                _snack(context, 'Commande validée pour "$name".');
+                _snack(context,
+                  'Commande validée pour "$name". Prêt à ${_two(ready.hour)}:${_two(ready.minute)}.');
               }
             },
             icon: const Icon(Icons.check),
@@ -1218,10 +1287,7 @@ class OrdersPage extends StatelessWidget {
               return ListTile(
                 leading: const Icon(Icons.receipt),
                 title: Text('Commande$who • ${o.lines.length} article(s) • €${o.total.toStringAsFixed(2)}'),
-                subtitle: Text(
-                  '${o.createdAt.hour.toString().padLeft(2, '0')}:${o.createdAt.minute.toString().padLeft(2, '0')} '
-                  '${o.createdAt.day.toString().padLeft(2, '0')}/${o.createdAt.month.toString().padLeft(2, '0')}',
-                ),
+                subtitle: Text('Prêt à ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}'),
                 trailing: IconButton(
                   icon: const Icon(Icons.print_outlined),
                   onPressed: () async {
@@ -1245,10 +1311,15 @@ class OrdersPage extends StatelessWidget {
                           children: [
                             if (o.customer.isNotEmpty)
                               Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.only(bottom: 4),
                                 child: Text('Client: ${o.customer}',
                                     style: const TextStyle(fontWeight: FontWeight.bold)),
                               ),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text('Prêt à: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold)),
+                            ),
                             for (int idx = 0; idx < o.lines.length; idx++) ...[
                               Text('Article ${idx+1}: ${o.lines[idx].product.name}',
                                   style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -1425,8 +1496,11 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
-String _money(double v) =>
-    '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
+String _moneyNoEuro(double v) =>
+    v.toStringAsFixed(2).replaceAll('.', ',');
+
+String _moneyEuroLeft(double v) =>
+    '€' + _moneyNoEuro(v);
 
 String _rightLine(String left, String right, {int width = 32}) {
   left = left.replaceAll('\n', ' ');
@@ -1474,47 +1548,58 @@ void _writeCp1252(Socket socket, String text) {
 Future<void> printOrderAndroid(SavedOrder o) async {
   final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  _cmd(socket, [27, 64]);
-  _cmd(socket, [27, 77, 0]);
-  _cmd(socket, [27, 116, 16]);
+  void write(String t) => _writeCp1252(socket, t);
+  void cmd(List<int> b) => _cmd(socket, b);
+
+  cmd([27, 64]);
+  cmd([27, 77, 0]);
+  cmd([27, 116, 16]);
 
   _alignCenter(socket);
-  _writeCp1252(socket, '*** BISCORNUE ***\n');
+  write('*** BISCORNUE ***\n');
   if (o.customer.isNotEmpty) {
-    _writeCp1252(socket, 'Client: ${o.customer}\n');
+    _boldOn(socket);
+    _size(socket, 1);
+    write('Client: ${o.customer}\n');
+    _size(socket, 0);
+    _boldOff(socket);
   }
-  final d = o.createdAt;
-  _writeCp1252(socket, '${_two(d.day)}/${_two(d.month)}/${d.year} ${_two(d.hour)}:${_two(d.minute)}\n');
-  _alignLeft(socket);
-  _writeCp1252(socket, '---\n');
-
-  for (int i = 0; i < o.lines.length; i++) {
-    final l = o.lines[i];
-    _writeCp1252(socket, _rightLine('Item ${i + 1}: ${l.product.name}', _money(l.total)) + '\n');
-    for (final g in l.product.groups) {
-      final sel = l.picked[g.id] ?? const <OptionItem>[];
-      if (sel.isNotEmpty) {
-        _writeCp1252(socket, '  ${g.title}:\n');
-        for (final it in sel) {
-          _writeCp1252(socket, '    * ${it.label}\n');
-        }
-      }
-    }
-    _writeCp1252(socket, '\n');
-    if (i != o.lines.length - 1) {
-      _writeCp1252(socket, '--------------------------------\n');
-    }
-  }
-
-  _writeCp1252(socket, '---\n');
-  _alignRight(socket);
+  
   _boldOn(socket);
   _size(socket, 1);
-  _writeCp1252(socket, _rightLine('TOTAL', '€${o.total.toStringAsFixed(2).replaceAll('.', ',')}') + '\n');
+  write('Pret a: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}\n');
   _size(socket, 0);
   _boldOff(socket);
 
-  _cmd(socket, [10, 10, 29, 86, 66, 0]);
+  _alignLeft(socket);
+  write('---\n');
+
+  for (int i = 0; i < o.lines.length; i++) {
+    final l = o.lines[i];
+    write('Item ${i + 1}: ${l.product.name}\n');
+    for (final g in l.product.groups) {
+      final sel = l.picked[g.id] ?? const <OptionItem>[];
+      if (sel.isNotEmpty) {
+        write('  ${g.title}:\n');
+        for (final it in sel) {
+          final p = it.price == 0 ? '' : ' (+${_moneyNoEuro(it.price)})';
+          write('    * ${it.label}$p\n');
+        }
+      }
+    }
+    _alignRight(socket);
+    write(_moneyNoEuro(l.total) + '\n');
+    _alignLeft(socket);
+    write('\n');
+  }
+
+  write('---\n');
+  _alignRight(socket);
+  write(_rightLine('Sous-total', _moneyNoEuro(o.total)) + '\n');
+  write(_rightLine('Total',      _moneyEuroLeft(o.total)) + '\n');
+  _alignLeft(socket);
+
+  cmd([10, 10, 29, 86, 66, 0]);
 
   await socket.flush();
   await socket.close();
