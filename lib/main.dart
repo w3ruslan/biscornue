@@ -304,7 +304,7 @@ class ProductsPage extends StatelessWidget {
     int cross = 2;
     if (width > 600) cross = 3;
     if (width > 900) cross = 4;
-    final tileRatio = width > 900 ? 1.7 : (width > 600 ? 1.5 : 1.35);
+    final aspect = width > 900 ? 0.9 : (width > 600 ? 0.95 : 0.88);
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -312,7 +312,7 @@ class ProductsPage extends StatelessWidget {
         crossAxisCount: cross,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: tileRatio,
+        childAspectRatio: aspect,
       ),
       itemCount: products.length,
       itemBuilder: (_, i) => _ProductCard(product: products[i]),
@@ -320,6 +320,7 @@ class ProductsPage extends StatelessWidget {
   }
 }
 
+// --- YENİ DÜZENLEME: STACK TABANLI KART TASARIMI ---
 class _ProductCard extends StatelessWidget {
   final Product product;
   const _ProductCard({super.key, required this.product});
@@ -339,69 +340,64 @@ class _ProductCard extends StatelessWidget {
     }
 
     return InkWell(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(24),
       onTap: openWizard,
       child: Ink(
         decoration: BoxDecoration(
-          color: color.surfaceVariant,
-          borderRadius: BorderRadius.circular(20),
+          color: color.surfaceVariant, borderRadius: BorderRadius.circular(24),
         ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    height: 48,
-                    width: 48,
+                    height: 56, width: 56,
                     decoration: BoxDecoration(
                       color: color.primary.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Icon(Icons.fastfood_rounded, color: color.primary, size: 28),
+                    child: Icon(Icons.fastfood_rounded, color: color.primary, size: 32),
                   ),
                   const SizedBox(height: 12),
-                  Text(product.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  Text('${product.groups.length} groupe(s)',
-                      style: TextStyle(color: color.onSurfaceVariant)),
+                  Text(product.name,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text('${product.groups.length} groupe(s)'),
+                  const SizedBox(height: 8),
                 ],
               ),
-              Row(
-                children: [
-                  FilledButton(
-                    onPressed: openWizard,
-                    style: FilledButton.styleFrom(
-                      shape: const CircleBorder(),
-                      minimumSize: const Size(44, 44),
-                      padding: EdgeInsets.zero,
+            ),
+            Positioned(
+              left: 12,
+              bottom: 12,
+              child: choisirButton(() => openWizard(), context),
+            ),
+            Positioned(
+              right: 8,
+              bottom: 8,
+              child: IconButton(
+                tooltip: 'Modifier',
+                icon: const Icon(Icons.edit_outlined),
+                onPressed: () async {
+                  final ok = await _askPin(context);
+                  if (!ok) return;
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => CreateProductPage(
+                        onGoToTab: (_) {},
+                        editIndex: AppScope.of(context).products.indexOf(product),
+                      ),
                     ),
-                    child: const Icon(Icons.shopping_cart_outlined, size: 20),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () async {
-                      final ok = await _askPin(context);
-                      if (!ok) return;
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => CreateProductPage(
-                            onGoToTab: (_) {},
-                            editIndex: AppScope.of(context).products.indexOf(product),
-                          ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-                  ),
-                ],
+                  );
+                },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -738,8 +734,7 @@ class _OrderWizardState extends State<OrderWizard> {
     if (widget.product.name != 'Menu Enfant') return base;
 
     final cheeseSecildiMi =
-        (picked['choix_enfant'] ?? const <OptionItem>[])
-            .any((it) => it.id == 'cheese_menu');
+        (picked['choix_enfant'] ?? const <OptionItem>[]).any((it) => it.id == 'cheese_menu');
 
     return base.where((g) {
       if (g.id == 'crudites_enfant') return cheeseSecildiMi;
