@@ -173,250 +173,56 @@ class _HomeState extends State<Home> {
 
     final app = AppScope.of(context);
     if (app.products.isEmpty) {
-      final products = <Product>[
-        // 1) SANDWICH
-        Product(name: 'Sandwich', groups: [
-          OptionGroup(
-            id: 'type_sand', title: 'Sandwich', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'kebab',     label: 'Kebab',        price: 8.90),
-              OptionItem(id: 'poulet',    label: 'Poulet',       price: 8.90),
-              OptionItem(id: 'steak',     label: 'Steak hache',  price: 8.90),
-              OptionItem(id: 'vege',      label: 'Vegetarien',   price: 8.90),
-              OptionItem(id: 'berlineur', label: 'Berlineur',    price: 10.90),
-            ],
-          ),
-          OptionGroup(
-            id: 'pain', title: 'Pain', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'pita',    label: 'Pain pita', price: 0.00),
-              OptionItem(id: 'galette', label: 'Galette',   price: 0.00),
-            ],
-          ),
-          // --- YENİ DÜZENLEME: CRUDITES GRUBU GÜNCELLENDİ ---
-          OptionGroup(
-            id: 'crudites',
-            title: 'Crudites / Retirer (max 4)',
-            multiple: true,
-            minSelect: 0,
-            maxSelect: 4,
-            items: [
-              OptionItem(id: 'sans_crudites', label: 'Sans crudites', price: 0),
-              OptionItem(id: 'sans_tomates', label: 'Sans tomates', price: 0),
-              OptionItem(id: 'sans_salade', label: 'Sans salade', price: 0),
-              OptionItem(id: 'sans_oignons', label: 'Sans oignons', price: 0),
-              OptionItem(id: 'sans_cornichons', label: 'Sans cornichons', price: 0),
-            ],
-          ),
-          OptionGroup(
-            id: 'supp', title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3,
-            items: [
-              OptionItem(id: 'cheddar',        label: 'Cheddar',                      price: 1.50),
-              OptionItem(id: 'mozzarella',     label: 'Mozzarella rapee',             price: 1.50),
-              OptionItem(id: 'feta',           label: 'Feta',                         price: 1.50),
-              OptionItem(id: 'porc',           label: 'Poitrine de porc fume',        price: 1.50),
-              OptionItem(id: 'chevre',         label: 'Chevre',                       price: 1.50),
-              OptionItem(id: 'legumes',        label: 'Legumes grilles',              price: 1.50),
-              OptionItem(id: 'oeuf',           label: 'Oeuf',                         price: 1.50),
-              OptionItem(id: 'double_cheddar', label: 'Double Cheddar',               price: 3.00),
-              OptionItem(id: 'double_mozza',   label: 'Double Mozzarella rapee',      price: 3.00),
-              OptionItem(id: 'double_porc',    label: 'Double Poitrine de porc fume', price: 3.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'sauces', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
-            items: [
-              OptionItem(id: 'sans_sauce', label: 'Sans sauce',            price: 0.00),
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison',  price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',               price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',            price: 0.00),
-              OptionItem(id: 'algerienne', label: 'Algerienne',            price: 0.00),
-              OptionItem(id: 'bbq',        label: 'Barbecue',              price: 0.00),
-              OptionItem(id: 'bigburger',  label: 'Big Burger',            price: 0.00),
-              OptionItem(id: 'harissa',    label: 'Harissa',               price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'formule', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'seul',    label: 'Seul',                     price: 0.00),
-              OptionItem(id: 'frites',  label: 'Avec frites',              price: 1.00),
-              OptionItem(id: 'boisson', label: 'Avec boisson',             price: 1.00),
-              OptionItem(id: 'menu',    label: 'Avec frites et boisson',   price: 2.00),
-            ],
-          ),
-        ]),
-
-        // 2) TACOS (ornek)
-        Product(name: 'Tacos', groups: [
-          OptionGroup(
-            id: 'type_tacos', title: 'Taille', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'm', label: 'M', price: 8.50),
-              OptionItem(id: 'l', label: 'L', price: 10.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'viande_tacos', title: 'Viande', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'kebab',  label: 'Kebab',  price: 0.00),
-              OptionItem(id: 'poulet', label: 'Poulet', price: 0.00),
-              OptionItem(id: 'steak',  label: 'Steak',  price: 0.00),
-              OptionItem(id: 'vege',   label: 'Vegetarien', price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'supp_tacos', title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3,
-            items: [
-              OptionItem(id: 'cheddar',    label: 'Cheddar',          price: 1.50),
-              OptionItem(id: 'mozzarella', label: 'Mozzarella rapee', price: 1.50),
-              OptionItem(id: 'oeuf',       label: 'Oeuf',             price: 1.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
-            items: [
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
-              OptionItem(id: 'algerienne', label: 'Algerienne',           price: 0.00),
-              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
-              OptionItem(id: 'harissa',    label: 'Harissa',              price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'formule_tacos', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'seul',   label: 'Seul',                   price: 0.00),
-              OptionItem(id: 'menu',   label: 'Avec frites et boisson', price: 2.00),
-            ],
-          ),
-        ]),
-
-        // 3) BURGERS (ornek)
-        Product(name: 'Burgers', groups: [
-          OptionGroup(
-            id: 'type_burger', title: 'Burger', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'classic',  label: 'Classic',         price: 7.90),
-              OptionItem(id: 'double',   label: 'Double cheese',   price: 9.90),
-              OptionItem(id: 'chicken',  label: 'Chicken',         price: 8.50),
-              OptionItem(id: 'veggie',   label: 'Veggie',          price: 8.50),
-            ],
-          ),
-          OptionGroup(
-            id: 'sauce_burger', title: 'Sauces', multiple: true, minSelect: 0, maxSelect: 2,
-            items: [
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
-              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'formule_burger', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'seul',    label: 'Seul',                    price: 0.00),
-              OptionItem(id: 'frites',  label: 'Avec frites',             price: 1.00),
-              OptionItem(id: 'menu',    label: 'Avec frites et boisson',  price: 2.00),
-            ],
-          ),
-        ]),
-
-        // 4) BOX (ornek)
-        Product(name: 'Box', groups: [
-          OptionGroup(
-            id: 'type_box', title: 'Choix box', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'tenders6', label: '6 Tenders',  price: 6.50),
-              OptionItem(id: 'nuggets9', label: '9 Nuggets',  price: 7.90),
-              OptionItem(id: 'wings8',   label: '8 Wings',    price: 7.90),
-              OptionItem(id: 'mix12',    label: 'Mix 12 pcs', price: 9.90),
-            ],
-          ),
-          OptionGroup(
-            id: 'sauce_box', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
-            items: [
-              OptionItem(id: 'ketchup', label: 'Ketchup',   price: 0.00),
-              OptionItem(id: 'mayo',    label: 'Mayonnaise',price: 0.00),
-              OptionItem(id: 'bbq',     label: 'Barbecue',  price: 0.00),
-              OptionItem(id: 'blanche', label: 'Sauce blanche maison', price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'plus_box', title: 'Accompagnement', multiple: true, minSelect: 0, maxSelect: 2,
-            items: [
-              OptionItem(id: 'frites',  label: 'Frites',  price: 2.00),
-              OptionItem(id: 'boisson', label: 'Boisson', price: 1.50),
-            ],
-          ),
-        ]),
-
-        // 5) MENU ENFANT (kosullu crudites)
-        Product(name: 'Menu Enfant', groups: [
-          OptionGroup(
-            id: 'choix_enfant', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'cheese_menu',  label: 'Cheeseburger avec frites', price: 7.90),
-              OptionItem(id: 'nuggets_menu', label: '5 Nuggets et frites',      price: 7.90),
-            ],
-          ),
-          OptionGroup(
-            id: 'crudites_enfant', title: 'Crudites', multiple: true, minSelect: 0, maxSelect: 3,
-            items: [
-              OptionItem(id: 'avec',          label: 'Avec crudites',  price: 0.00),
-              OptionItem(id: 'sans_salade',   label: 'Sans salade',    price: 0.00),
-              OptionItem(id: 'sans_cornichon',label: 'Sans cornichon', price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'sauce_enfant', title: 'Sauces', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'sans_sauce', label: 'Sans sauce',           price: 0.00),
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'boisson_enfant', title: 'Boisson', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'sans_boisson', label: 'Sans boisson', price: 0.00),
-              OptionItem(id: 'avec_boisson', label: 'Avec boisson', price: 1.00),
-            ],
-          ),
-        ]),
-
-        // 6) PETIT FAIM
-        Product(name: 'Petit Faim', groups: [
-          OptionGroup(
-            id: 'choix_pf', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'frites_p',  label: 'Frites petite portion', price: 3.00),
-              OptionItem(id: 'frites_g',  label: 'Frites grande portion', price: 6.00),
-              OptionItem(id: 'tenders3',  label: '3 Tenders', price: 0.00),
-              OptionItem(id: 'tenders6',  label: '6 Tenders', price: 0.00),
-              OptionItem(id: 'nuggets6',  label: '6 Nuggets', price: 0.00),
-              OptionItem(id: 'nuggets12', label: '12 Nuggets', price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'sauce_pf', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
-            items: [
-              OptionItem(id: 'sans_sauce', label: 'Sans sauce',           price: 0.00),
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
-              OptionItem(id: 'algerienne', label: 'Algerienne',           price: 0.00),
-              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
-              OptionItem(id: 'bigburger',  label: 'Big Burger',           price: 0.00),
-              OptionItem(id: 'harissa',    label: 'Harissa',              price: 0.00),
-            ],
-          ),
-        ]),
-      ];
-
-      app.products.addAll(products);
+      final sandwich = Product(name: 'Sandwich');
+      sandwich.groups.addAll([
+        OptionGroup(
+          id: 'pain', title: 'Pain', multiple: false, minSelect: 1, maxSelect: 1,
+          items: [ OptionItem(id: 'galette', label: 'Galette', price: 0),
+                   OptionItem(id: 'pita', label: 'Pain pita', price: 0), ],
+        ),
+        OptionGroup(
+          id: 'viande', title: 'Viande', multiple: false, minSelect: 1, maxSelect: 1,
+          items: [ OptionItem(id: 'kebab', label: 'Kebab', price: 0),
+                   OptionItem(id: 'steak', label: 'Steak', price: 0),
+                   OptionItem(id: 'poulet', label: 'Poulet', price: 0),
+                   OptionItem(id: 'legumes', label: 'Légumes grillés', price: 0), ],
+        ),
+        OptionGroup(
+          id: 'supp', title: 'Suppléments (max 3)', multiple: true, minSelect: 0, maxSelect: 3,
+          items: [
+            OptionItem(id: 'oeuf', label: 'Œuf', price: 1.00),
+            OptionItem(id: 'cheddar', label: 'Cheddar', price: 1.00),
+            OptionItem(id: 'double_cheddar', label: 'Double cheddar', price: 1.80),
+            OptionItem(id: 'bacon', label: 'Bacon', price: 1.50),
+            OptionItem(id: 'cornichon', label: 'Cornichons', price: 0.50),
+            OptionItem(id: 'oignon', label: 'Oignons', price: 0.50),
+            OptionItem(id: 'salade', label: 'Salade', price: 0.30),
+          ],
+        ),
+        OptionGroup(
+          id: 'sauces', title: 'Sauces (max 2)', multiple: true, minSelect: 0, maxSelect: 2,
+          items: [
+            OptionItem(id: 'algerienne', label: 'Algérienne', price: 0),
+            OptionItem(id: 'blanche', label: 'Blanche', price: 0),
+            OptionItem(id: 'ketchup', label: 'Ketchup', price: 0),
+            OptionItem(id: 'mayo', label: 'Mayonnaise', price: 0),
+            OptionItem(id: 'harissa', label: 'Harissa', price: 0),
+            OptionItem(id: 'bbq', label: 'Barbecue', price: 0),
+            OptionItem(id: 'andalouse', label: 'Andalouse', price: 0),
+          ],
+        ),
+        OptionGroup(
+          id: 'accompagnement', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1,
+          items: [ OptionItem(id: 'frites', label: 'Avec frites', price: 2.50),
+                   OptionItem(id: 'sans_frites', label: 'Sans frites', price: 0), ],
+        ),
+        OptionGroup(
+          id: 'boisson', title: 'Boisson', multiple: false, minSelect: 1, maxSelect: 1,
+          items: [ OptionItem(id: 'avec_boisson', label: 'Avec boisson', price: 2.00),
+                   OptionItem(id: 'sans_boisson', label: 'Sans boisson', price: 0), ],
+        ),
+      ]);
+      app.addProduct(sandwich);
     }
   }
 
@@ -498,7 +304,7 @@ class ProductsPage extends StatelessWidget {
     int cross = 2;
     if (width > 600) cross = 3;
     if (width > 900) cross = 4;
-    final aspect = width < 500 ? 0.88 : 1.0;
+    final tileRatio = width > 900 ? 1.7 : (width > 600 ? 1.5 : 1.35);
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -506,7 +312,7 @@ class ProductsPage extends StatelessWidget {
         crossAxisCount: cross,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: aspect,
+        childAspectRatio: tileRatio,
       ),
       itemCount: products.length,
       itemBuilder: (_, i) => _ProductCard(product: products[i]),
@@ -524,7 +330,8 @@ class _ProductCard extends StatelessWidget {
 
     Future<void> openWizard() async {
       final added = await Navigator.push<bool>(
-        context, MaterialPageRoute(builder: (_) => OrderWizard(product: product)),
+        context,
+        MaterialPageRoute(builder: (_) => OrderWizard(product: product)),
       );
       if (added == true && context.mounted) {
         _snack(context, 'Ajouté au panier.');
@@ -940,7 +747,7 @@ class _OrderWizardState extends State<OrderWizard> {
     }).toList();
   }
 
-  // --- YENİ DÜZENLEME: AKILLI ÇOKLU SEÇİM ---
+  void _toggleSingle(OptionGroup g, OptionItem it) { picked[g.id] = [it]; setState(() {}); }
   void _toggleMulti(OptionGroup g, OptionItem it) {
     final list = List<OptionItem>.from(picked[g.id] ?? []);
     final isCrud = g.id == 'crudites';
@@ -966,8 +773,6 @@ class _OrderWizardState extends State<OrderWizard> {
     picked[g.id] = list;
     setState(() {});
   }
-
-  void _toggleSingle(OptionGroup g, OptionItem it) { picked[g.id] = [it]; setState(() {}); }
   
   bool _validGroup(OptionGroup g) {
     final n = (picked[g.id] ?? const []).length;
@@ -1077,7 +882,6 @@ class _GroupStep extends StatelessWidget {
     int cross = (size.width / desired).floor().clamp(2, 5);
 
     final selectedList = picked[group.id] ?? const <OptionItem>[];
-    // --- YENİ DÜZENLEME: PASİF GÖSTERME MANTIĞI ---
     final sansCrudOn = group.id == 'crudites'
         && selectedList.any((e) => e.id == 'sans_crudites');
 
