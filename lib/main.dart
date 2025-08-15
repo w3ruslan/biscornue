@@ -1430,11 +1430,8 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
-// --- YENİ PARA YARDIMCILARI ---
-String _moneyNoEuro(double v) =>
-    v.toStringAsFixed(2).replaceAll('.', ',');
-String _moneyEuroLeft(double v) =>
-    '€' + _moneyNoEuro(v);
+String _money(double v) =>
+    '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
 
 String _rightLine(String left, String right, {int width = 32}) {
   left = left.replaceAll('\n', ' ');
@@ -1479,50 +1476,50 @@ void _writeCp1252(Socket socket, String text) {
   socket.add(out);
 }
 
-// --- YENİ DÜZENLEME: SADELEŞTİRİLMİŞ FİŞ TASARIMI ---
 Future<void> printOrderAndroid(SavedOrder o) async {
   final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  void write(String t) => _writeCp1252(socket, t);
-  void cmd(List<int> b) => _cmd(socket, b);
-
-  cmd([27, 64]);
-  cmd([27, 77, 0]);
-  cmd([27, 116, 16]);
+  _cmd(socket, [27, 64]);
+  _cmd(socket, [27, 77, 0]);
+  _cmd(socket, [27, 116, 16]);
 
   _alignCenter(socket);
-  write('*** BISCORNUE ***\n');
+  _writeCp1252(socket, '*** BISCORNUE ***\n');
   if (o.customer.isNotEmpty) {
-    write('Client: ${o.customer}\n');
+    _writeCp1252(socket, 'Client: ${o.customer}\n');
   }
   final d = o.createdAt;
-  write('${_two(d.day)}/${_two(d.month)}/${d.year} '
-        '${_two(d.hour)}:${_two(d.minute)}\n');
+  _writeCp1252(socket, '${_two(d.day)}/${_two(d.month)}/${d.year} ${_two(d.hour)}:${_two(d.minute)}\n');
   _alignLeft(socket);
-  write('---\n');
+  _writeCp1252(socket, '---\n');
 
   for (int i = 0; i < o.lines.length; i++) {
     final l = o.lines[i];
-    write('Item ${i + 1}: ${l.product.name}\n');
+    _writeCp1252(socket, _rightLine('Item ${i + 1}: ${l.product.name}', _money(l.total)) + '\n');
     for (final g in l.product.groups) {
       final sel = l.picked[g.id] ?? const <OptionItem>[];
       if (sel.isNotEmpty) {
-        write('  ${g.title}:\n');
+        _writeCp1252(socket, '  ${g.title}:\n');
         for (final it in sel) {
-          write('    * ${it.label}\n');
+          _writeCp1252(socket, '    * ${it.label}\n');
         }
       }
     }
-    write('\n');
+    _writeCp1252(socket, '\n');
+    if (i != o.lines.length - 1) {
+      _writeCp1252(socket, '--------------------------------\n');
+    }
   }
 
-  write('---\n');
+  _writeCp1252(socket, '---\n');
   _alignRight(socket);
-  write(_rightLine('Sous-total', _moneyNoEuro(o.total)) + '\n');
-  write(_rightLine('Total',      _moneyEuroLeft(o.total)) + '\n');
-  _alignLeft(socket);
+  _boldOn(socket);
+  _size(socket, 1);
+  _writeCp1252(socket, _rightLine('TOTAL', '€${o.total.toStringAsFixed(2).replaceAll('.', ',')}') + '\n');
+  _size(socket, 0);
+  _boldOff(socket);
 
-  cmd([10, 10, 29, 86, 66, 0]);
+  _cmd(socket, [10, 10, 29, 86, 66, 0]);
 
   await socket.flush();
   await socket.close();
