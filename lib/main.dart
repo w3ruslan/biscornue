@@ -87,14 +87,14 @@ class CartLine {
 class SavedOrder {
   final String id;
   final DateTime createdAt;
-  final DateTime readyAt;        // YENİ
+  final DateTime readyAt;
   final List<CartLine> lines;
   final String customer;
   
   SavedOrder({
     required this.id,
     required this.createdAt,
-    required this.readyAt,       // YENİ
+    required this.readyAt,
     required this.lines,
     required this.customer,
   });
@@ -154,7 +154,7 @@ class AppState extends ChangeNotifier {
     orders.add(SavedOrder(
       id: now.millisecondsSinceEpoch.toString(),
       createdAt: now,
-      readyAt: ready,                 // YENİ
+      readyAt: ready,
       lines: deepLines,
       customer: customer,
     ));
@@ -196,56 +196,238 @@ class _HomeState extends State<Home> {
 
     final app = AppScope.of(context);
     if (app.products.isEmpty) {
-      final sandwich = Product(name: 'Sandwich');
-      sandwich.groups.addAll([
-        OptionGroup(
-          id: 'pain', title: 'Pain', multiple: false, minSelect: 1, maxSelect: 1,
-          items: [ OptionItem(id: 'galette', label: 'Galette', price: 0),
-                   OptionItem(id: 'pita', label: 'Pain pita', price: 0), ],
-        ),
-        OptionGroup(
-          id: 'viande', title: 'Viande', multiple: false, minSelect: 1, maxSelect: 1,
-          items: [ OptionItem(id: 'kebab', label: 'Kebab', price: 0),
-                   OptionItem(id: 'steak', label: 'Steak', price: 0),
-                   OptionItem(id: 'poulet', label: 'Poulet', price: 0),
-                   OptionItem(id: 'legumes', label: 'Légumes grillés', price: 0), ],
-        ),
-        OptionGroup(
-          id: 'supp', title: 'Suppléments (max 3)', multiple: true, minSelect: 0, maxSelect: 3,
-          items: [
-            OptionItem(id: 'oeuf', label: 'Œuf', price: 1.00),
-            OptionItem(id: 'cheddar', label: 'Cheddar', price: 1.00),
-            OptionItem(id: 'double_cheddar', label: 'Double cheddar', price: 1.80),
-            OptionItem(id: 'bacon', label: 'Bacon', price: 1.50),
-            OptionItem(id: 'cornichon', label: 'Cornichons', price: 0.50),
-            OptionItem(id: 'oignon', label: 'Oignons', price: 0.50),
-            OptionItem(id: 'salade', label: 'Salade', price: 0.30),
-          ],
-        ),
-        OptionGroup(
-          id: 'sauces', title: 'Sauces (max 2)', multiple: true, minSelect: 0, maxSelect: 2,
-          items: [
-            OptionItem(id: 'algerienne', label: 'Algérienne', price: 0),
-            OptionItem(id: 'blanche', label: 'Blanche', price: 0),
-            OptionItem(id: 'ketchup', label: 'Ketchup', price: 0),
-            OptionItem(id: 'mayo', label: 'Mayonnaise', price: 0),
-            OptionItem(id: 'harissa', label: 'Harissa', price: 0),
-            OptionItem(id: 'bbq', label: 'Barbecue', price: 0),
-            OptionItem(id: 'andalouse', label: 'Andalouse', price: 0),
-          ],
-        ),
-        OptionGroup(
-          id: 'accompagnement', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1,
-          items: [ OptionItem(id: 'frites', label: 'Avec frites', price: 2.50),
-                   OptionItem(id: 'sans_frites', label: 'Sans frites', price: 0), ],
-        ),
-        OptionGroup(
-          id: 'boisson', title: 'Boisson', multiple: false, minSelect: 1, maxSelect: 1,
-          items: [ OptionItem(id: 'avec_boisson', label: 'Avec boisson', price: 2.00),
-                   OptionItem(id: 'sans_boisson', label: 'Sans boisson', price: 0), ],
-        ),
-      ]);
-      app.addProduct(sandwich);
+      final products = <Product>[
+        Product(name: 'Sandwich', groups: [
+          OptionGroup(
+            id: 'type_sand', title: 'Sandwich', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'kebab',     label: 'Kebab',        price: 8.90),
+              OptionItem(id: 'poulet',    label: 'Poulet',       price: 8.90),
+              OptionItem(id: 'steak',     label: 'Steak hache',  price: 8.90),
+              OptionItem(id: 'vege',      label: 'Vegetarien',   price: 8.90),
+              OptionItem(id: 'berlineur', label: 'Berlineur',    price: 10.90),
+            ],
+          ),
+          OptionGroup(
+            id: 'pain', title: 'Pain', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'pita',    label: 'Pain pita', price: 0.00),
+              OptionItem(id: 'galette', label: 'Galette',   price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'crudites',
+            title: 'Crudites / Retirer (max 4)',
+            multiple: true,
+            minSelect: 0,
+            maxSelect: 4,
+            items: [
+              OptionItem(id: 'sans_crudites', label: 'Sans crudites', price: 0),
+              OptionItem(id: 'sans_tomates', label: 'Sans tomates', price: 0),
+              OptionItem(id: 'sans_salade', label: 'Sans salade', price: 0),
+              OptionItem(id: 'sans_oignons', label: 'Sans oignons', price: 0),
+              OptionItem(id: 'sans_cornichons', label: 'Sans cornichons', price: 0),
+            ],
+          ),
+          OptionGroup(
+            id: 'supp', title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3,
+            items: [
+              OptionItem(id: 'cheddar',        label: 'Cheddar',                      price: 1.50),
+              OptionItem(id: 'mozzarella',     label: 'Mozzarella rapee',             price: 1.50),
+              OptionItem(id: 'feta',           label: 'Feta',                         price: 1.50),
+              OptionItem(id: 'porc',           label: 'Poitrine de porc fume',        price: 1.50),
+              OptionItem(id: 'chevre',         label: 'Chevre',                       price: 1.50),
+              OptionItem(id: 'legumes',        label: 'Legumes grilles',              price: 1.50),
+              OptionItem(id: 'oeuf',           label: 'Oeuf',                         price: 1.50),
+              OptionItem(id: 'double_cheddar', label: 'Double Cheddar',               price: 3.00),
+              OptionItem(id: 'double_mozza',   label: 'Double Mozzarella rapee',      price: 3.00),
+              OptionItem(id: 'double_porc',    label: 'Double Poitrine de porc fume', price: 3.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'sauces', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
+            items: [
+              OptionItem(id: 'sans_sauce', label: 'Sans sauce',            price: 0.00),
+              OptionItem(id: 'blanche',    label: 'Sauce blanche maison',  price: 0.00),
+              OptionItem(id: 'ketchup',    label: 'Ketchup',               price: 0.00),
+              OptionItem(id: 'mayo',       label: 'Mayonnaise',            price: 0.00),
+              OptionItem(id: 'algerienne', label: 'Algerienne',            price: 0.00),
+              OptionItem(id: 'bbq',        label: 'Barbecue',              price: 0.00),
+              OptionItem(id: 'bigburger',  label: 'Big Burger',            price: 0.00),
+              OptionItem(id: 'harissa',    label: 'Harissa',               price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'formule', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'seul',    label: 'Seul',                     price: 0.00),
+              OptionItem(id: 'frites',  label: 'Avec frites',              price: 1.00),
+              OptionItem(id: 'boisson', label: 'Avec boisson',             price: 1.00),
+              OptionItem(id: 'menu',    label: 'Avec frites et boisson',   price: 2.00),
+            ],
+          ),
+        ]),
+        Product(name: 'Tacos', groups: [
+          OptionGroup(
+            id: 'type_tacos', title: 'Taille', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'm', label: 'M', price: 8.50),
+              OptionItem(id: 'l', label: 'L', price: 10.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'viande_tacos', title: 'Viande', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'kebab',  label: 'Kebab',  price: 0.00),
+              OptionItem(id: 'poulet', label: 'Poulet', price: 0.00),
+              OptionItem(id: 'steak',  label: 'Steak',  price: 0.00),
+              OptionItem(id: 'vege',   label: 'Vegetarien', price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'supp_tacos', title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3,
+            items: [
+              OptionItem(id: 'cheddar',    label: 'Cheddar',          price: 1.50),
+              OptionItem(id: 'mozzarella', label: 'Mozzarella rapee', price: 1.50),
+              OptionItem(id: 'oeuf',       label: 'Oeuf',             price: 1.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
+            items: [
+              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
+              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
+              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
+              OptionItem(id: 'algerienne', label: 'Algerienne',           price: 0.00),
+              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
+              OptionItem(id: 'harissa',    label: 'Harissa',              price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'formule_tacos', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'seul',   label: 'Seul',                   price: 0.00),
+              OptionItem(id: 'menu',   label: 'Avec frites et boisson', price: 2.00),
+            ],
+          ),
+        ]),
+        Product(name: 'Burgers', groups: [
+          OptionGroup(
+            id: 'type_burger', title: 'Burger', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'classic',  label: 'Classic',         price: 7.90),
+              OptionItem(id: 'double',   label: 'Double cheese',   price: 9.90),
+              OptionItem(id: 'chicken',  label: 'Chicken',         price: 8.50),
+              OptionItem(id: 'veggie',   label: 'Veggie',          price: 8.50),
+            ],
+          ),
+          OptionGroup(
+            id: 'sauce_burger', title: 'Sauces', multiple: true, minSelect: 0, maxSelect: 2,
+            items: [
+              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
+              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
+              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
+              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'formule_burger', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'seul',    label: 'Seul',                    price: 0.00),
+              OptionItem(id: 'frites',  label: 'Avec frites',             price: 1.00),
+              OptionItem(id: 'menu',    label: 'Avec frites et boisson',  price: 2.00),
+            ],
+          ),
+        ]),
+        Product(name: 'Box', groups: [
+          OptionGroup(
+            id: 'type_box', title: 'Choix box', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'tenders6', label: '6 Tenders',  price: 6.50),
+              OptionItem(id: 'nuggets9', label: '9 Nuggets',  price: 7.90),
+              OptionItem(id: 'wings8',   label: '8 Wings',    price: 7.90),
+              OptionItem(id: 'mix12',    label: 'Mix 12 pcs', price: 9.90),
+            ],
+          ),
+          OptionGroup(
+            id: 'sauce_box', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
+            items: [
+              OptionItem(id: 'ketchup', label: 'Ketchup',   price: 0.00),
+              OptionItem(id: 'mayo',    label: 'Mayonnaise',price: 0.00),
+              OptionItem(id: 'bbq',     label: 'Barbecue',  price: 0.00),
+              OptionItem(id: 'blanche', label: 'Sauce blanche maison', price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'plus_box', title: 'Accompagnement', multiple: true, minSelect: 0, maxSelect: 2,
+            items: [
+              OptionItem(id: 'frites',  label: 'Frites',  price: 2.00),
+              OptionItem(id: 'boisson', label: 'Boisson', price: 1.50),
+            ],
+          ),
+        ]),
+        Product(name: 'Menu Enfant', groups: [
+          OptionGroup(
+            id: 'choix_enfant', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'cheese_menu',  label: 'Cheeseburger avec frites', price: 7.90),
+              OptionItem(id: 'nuggets_menu', label: '5 Nuggets et frites',      price: 7.90),
+            ],
+          ),
+          OptionGroup(
+            id: 'crudites_enfant', title: 'Crudites', multiple: true, minSelect: 0, maxSelect: 3,
+            items: [
+              OptionItem(id: 'avec',          label: 'Avec crudites',  price: 0.00),
+              OptionItem(id: 'sans_salade',   label: 'Sans salade',    price: 0.00),
+              OptionItem(id: 'sans_cornichon',label: 'Sans cornichon', price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'sauce_enfant', title: 'Sauces', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'sans_sauce', label: 'Sans sauce',           price: 0.00),
+              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
+              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
+              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'boisson_enfant', title: 'Boisson', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'sans_boisson', label: 'Sans boisson', price: 0.00),
+              OptionItem(id: 'avec_boisson', label: 'Avec boisson', price: 1.00),
+            ],
+          ),
+        ]),
+        Product(name: 'Petit Faim', groups: [
+          OptionGroup(
+            id: 'choix_pf', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'frites_p',  label: 'Frites petite portion', price: 3.00),
+              OptionItem(id: 'frites_g',  label: 'Frites grande portion', price: 6.00),
+              OptionItem(id: 'tenders3',  label: '3 Tenders', price: 0.00),
+              OptionItem(id: 'tenders6',  label: '6 Tenders', price: 0.00),
+              OptionItem(id: 'nuggets6',  label: '6 Nuggets', price: 0.00),
+              OptionItem(id: 'nuggets12', label: '12 Nuggets', price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'sauce_pf', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
+            items: [
+              OptionItem(id: 'sans_sauce', label: 'Sans sauce',           price: 0.00),
+              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
+              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
+              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
+              OptionItem(id: 'algerienne', label: 'Algerienne',           price: 0.00),
+              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
+              OptionItem(id: 'bigburger',  label: 'Big Burger',           price: 0.00),
+              OptionItem(id: 'harissa',    label: 'Harissa',              price: 0.00),
+            ],
+          ),
+        ]),
+      ];
+
+      app.products.addAll(products);
     }
   }
 
@@ -327,7 +509,7 @@ class ProductsPage extends StatelessWidget {
     int cross = 2;
     if (width > 600) cross = 3;
     if (width > 900) cross = 4;
-    final tileRatio = width > 900 ? 1.7 : (width > 600 ? 1.5 : 1.35);
+    final aspect = width > 900 ? 0.9 : (width > 600 ? 0.95 : 0.88);
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -335,7 +517,7 @@ class ProductsPage extends StatelessWidget {
         crossAxisCount: cross,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: tileRatio,
+        childAspectRatio: aspect,
       ),
       itemCount: products.length,
       itemBuilder: (_, i) => _ProductCard(product: products[i]),
@@ -362,69 +544,64 @@ class _ProductCard extends StatelessWidget {
     }
 
     return InkWell(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(24),
       onTap: openWizard,
       child: Ink(
         decoration: BoxDecoration(
-          color: color.surfaceVariant,
-          borderRadius: BorderRadius.circular(20),
+          color: color.surfaceVariant, borderRadius: BorderRadius.circular(24),
         ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    height: 48,
-                    width: 48,
+                    height: 56, width: 56,
                     decoration: BoxDecoration(
                       color: color.primary.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Icon(Icons.fastfood_rounded, color: color.primary, size: 28),
+                    child: Icon(Icons.fastfood_rounded, color: color.primary, size: 32),
                   ),
                   const SizedBox(height: 12),
-                  Text(product.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  Text('${product.groups.length} groupe(s)',
-                      style: TextStyle(color: color.onSurfaceVariant)),
+                  Text(product.name,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text('${product.groups.length} groupe(s)'),
+                  const SizedBox(height: 8),
                 ],
               ),
-              Row(
-                children: [
-                  FilledButton(
-                    onPressed: openWizard,
-                    style: FilledButton.styleFrom(
-                      shape: const CircleBorder(),
-                      minimumSize: const Size(44, 44),
-                      padding: EdgeInsets.zero,
+            ),
+            Positioned(
+              left: 12,
+              bottom: 12,
+              child: choisirButton(() => openWizard(), context),
+            ),
+            Positioned(
+              right: 8,
+              bottom: 8,
+              child: IconButton(
+                tooltip: 'Modifier',
+                icon: const Icon(Icons.edit_outlined),
+                onPressed: () async {
+                  final ok = await _askPin(context);
+                  if (!ok) return;
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => CreateProductPage(
+                        onGoToTab: (_) {},
+                        editIndex: AppScope.of(context).products.indexOf(product),
+                      ),
                     ),
-                    child: const Icon(Icons.shopping_cart_outlined, size: 20),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () async {
-                      final ok = await _askPin(context);
-                      if (!ok) return;
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => CreateProductPage(
-                            onGoToTab: (_) {},
-                            editIndex: AppScope.of(context).products.indexOf(product),
-                          ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-                  ),
-                ],
+                  );
+                },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1496,11 +1673,8 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
-String _moneyNoEuro(double v) =>
-    v.toStringAsFixed(2).replaceAll('.', ',');
-
-String _moneyEuroLeft(double v) =>
-    '€' + _moneyNoEuro(v);
+String _money(double v) =>
+    '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
 
 String _rightLine(String left, String right, {int width = 32}) {
   left = left.replaceAll('\n', ' ');
@@ -1548,58 +1722,59 @@ void _writeCp1252(Socket socket, String text) {
 Future<void> printOrderAndroid(SavedOrder o) async {
   final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  void write(String t) => _writeCp1252(socket, t);
-  void cmd(List<int> b) => _cmd(socket, b);
-
-  cmd([27, 64]);
-  cmd([27, 77, 0]);
-  cmd([27, 116, 16]);
+  _cmd(socket, [27, 64]);
+  _cmd(socket, [27, 116, 16]);
 
   _alignCenter(socket);
-  write('*** BISCORNUE ***\n');
+  _size(socket, 17);
+  _boldOn(socket);
+  _writeCp1252(socket, '*** BISCORNUE ***\n');
+  _boldOff(socket);
+  _size(socket, 0);
+
   if (o.customer.isNotEmpty) {
-    _boldOn(socket);
     _size(socket, 1);
-    write('Client: ${o.customer}\n');
-    _size(socket, 0);
+    _boldOn(socket);
+    _writeCp1252(socket, 'Client: ${o.customer}\n');
     _boldOff(socket);
+    _size(socket, 0);
   }
-  
+
   _boldOn(socket);
   _size(socket, 1);
-  write('Pret a: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}\n');
+  _writeCp1252(socket, 'Pret a: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}\n');
   _size(socket, 0);
   _boldOff(socket);
 
   _alignLeft(socket);
-  write('---\n');
+  _writeCp1252(socket, '------------------------------\n');
 
   for (int i = 0; i < o.lines.length; i++) {
     final l = o.lines[i];
-    write('Item ${i + 1}: ${l.product.name}\n');
+    _writeCp1252(socket, _rightLine('Item ${i + 1}: ${l.product.name}', _money(l.total)) + '\n');
     for (final g in l.product.groups) {
       final sel = l.picked[g.id] ?? const <OptionItem>[];
       if (sel.isNotEmpty) {
-        write('  ${g.title}:\n');
+        _writeCp1252(socket, '  ${g.title}:\n');
         for (final it in sel) {
-          final p = it.price == 0 ? '' : ' (+${_moneyNoEuro(it.price)})';
-          write('    * ${it.label}$p\n');
+          _writeCp1252(socket, '    * ${it.label}\n');
         }
       }
     }
-    _alignRight(socket);
-    write(_moneyNoEuro(l.total) + '\n');
-    _alignLeft(socket);
-    write('\n');
+    if (i != o.lines.length - 1) {
+      _writeCp1252(socket, '--------------------------------\n');
+    }
   }
 
-  write('---\n');
+  _writeCp1252(socket, '------------------------------\n');
   _alignRight(socket);
-  write(_rightLine('Sous-total', _moneyNoEuro(o.total)) + '\n');
-  write(_rightLine('Total',      _moneyEuroLeft(o.total)) + '\n');
-  _alignLeft(socket);
+  _boldOn(socket);
+  _size(socket, 1);
+  _writeCp1252(socket, _rightLine('TOTAL', '€${o.total.toStringAsFixed(2).replaceAll('.', ',')}') + '\n');
+  _size(socket, 0);
+  _boldOff(socket);
 
-  cmd([10, 10, 29, 86, 66, 0]);
+  _cmd(socket, [10, 10, 29, 86, 66, 0]);
 
   await socket.flush();
   await socket.close();
