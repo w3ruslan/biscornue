@@ -1,23 +1,24 @@
-import 'package:flutter/material.dart'; // HATA GİDERİLDİ: Eksik olan temel Flutter paketi en başa eklendi.
 import 'dart:io';
 import 'dart:convert';
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 
 /* =======================
-    Sabitler (Varsayılan Değerler)
-    ======================= */
-const String PRINTER_IP = '192.168.1.1';
-const int    PRINTER_PORT = 9100;
+    Sabitler
+    ======================= */
+// LÜTFEN BU IP ADRESİNİ KENDİ YAZICINIZIN IP ADRESİYLE DEĞİŞTİRİN
+const String PRINTER_IP = '192.168.1.1'; // <-- Epson yazıcının IP'si
+const int    PRINTER_PORT = 9100;        // Genelde 9100 (RAW)
+
 const String _ADMIN_PIN = '6538';
 
 /* =======================
-    ENTRY
-    ======================= */
+    ENTRY
+    ======================= */
 void main() {
   final appState = AppState();
-  appState.loadSettings();
+  appState.loadSettings(); // Ayarları yükle
   runApp(AppScope(notifier: appState, child: const App()));
 }
 
@@ -35,64 +36,13 @@ class App extends StatelessWidget {
 }
 
 /* =======================
-    AYARLAR MODELİ
-    ======================= */
-String _fnv64(String s, {String salt = 'bis-1'}) {
-  final data = (salt + s).codeUnits;
-  int hash = 0xcbf29ce484222325;
-  for (final b in data) {
-    hash ^= b;
-    hash = (hash * 0x00000100000001B3) & 0xFFFFFFFFFFFFFFFF;
-  }
-  return hash.toRadixString(16).padLeft(16, '0');
-}
-
-class AppSettings {
-  String printerIp;
-  int printerPort;
-  int paperCols;
-  String pinHash;
-  AppSettings({
-    required this.printerIp,
-    required this.printerPort,
-    required this.paperCols,
-    required this.pinHash,
-  });
-  factory AppSettings.defaults() => AppSettings(
-    printerIp: PRINTER_IP,
-    printerPort: PRINTER_PORT,
-    paperCols: 32,
-    pinHash: _fnv64(_ADMIN_PIN),
-  );
-  Map<String, dynamic> toJson() => {
-    'printerIp': printerIp,
-    'printerPort': printerPort,
-    'paperCols': paperCols,
-    'pinHash': pinHash,
-  };
-  static AppSettings fromJson(Map<String, dynamic> j) => AppSettings(
-    printerIp: j['printerIp'] ?? '192.168.1.1',
-    printerPort: j['printerPort'] ?? 9100,
-    paperCols: j['paperCols'] ?? 32,
-    pinHash: j['pinHash'] ?? _fnv64(_ADMIN_PIN),
-  );
-}
-
-extension _Prefs on SharedPreferences {
-  String? getStringOrNull(String k) => containsKey(k) ? getString(k) : null;
-}
-
-/* =======================
-    MODELLER & STATE
-    ======================= */
+    MODELLER & STATE
+    ======================= */
 class Product {
   String name;
   final List<OptionGroup> groups;
-  final int? prepMinutes; 
-
-  Product({required this.name, List<OptionGroup>? groups, this.prepMinutes})
+  Product({required this.name, List<OptionGroup>? groups})
       : groups = groups ?? [];
-
   double priceForSelection(Map<String, List<OptionItem>> picked) {
     double total = 0;
     for (final g in groups) {
@@ -106,7 +56,7 @@ class Product {
 class OptionGroup {
   final String id;
   String title;
-  bool multiple;
+  bool multiple; // false=tek, true=çoklu
   int minSelect;
   int maxSelect;
   final List<OptionItem> items;
@@ -129,11 +79,9 @@ class OptionItem {
 
 class CartLine {
   final Product product;
-  final Map<String, List<OptionItem>> picked;
-  int qty;
-  CartLine({required this.product, required this.picked, this.qty = 1});
-  double get unitTotal => product.priceForSelection(picked);
-  double get total => unitTotal * qty;
+  final Map<String, List<OptionItem>> picked; // deep copy saklı
+  CartLine({required this.product, required this.picked});
+  double get total => product.priceForSelection(picked);
 }
 
 class SavedOrder {
@@ -159,77 +107,10 @@ class AppState extends ChangeNotifier {
   final List<SavedOrder> orders = [];
   int prepMinutes = 5;
 
-  AppSettings settings = AppSettings.defaults();
-
   Future<void> loadSettings() async {
     final sp = await SharedPreferences.getInstance();
     prepMinutes = sp.getInt('prepMinutes') ?? 5;
-
-    final s = sp.getStringOrNull('appSettings');
-    settings = s == null
-      ? AppSettings.defaults()
-      : AppSettings.fromJson(jsonDecode(s) as Map<String, dynamic>);
-    
-    await _loadProductsFromPrefs(sp);
-    await _loadOrdersFromPrefs(sp);
-
     notifyListeners();
-  }
-
-  Future<void> _saveSettings() async {
-    final sp = await SharedPreferences.getInstance();
-    await sp.setString('appSettings', jsonEncode(settings.toJson()));
-  }
-
-  Future<void> setPrinterIp(String ip) async { settings.printerIp = ip.trim(); await _saveSettings(); notifyListeners(); }
-  Future<void> setPrinterPort(int p) async { settings.printerPort = p; await _saveSettings(); notifyListeners(); }
-  Future<void> setPaperCols(int c) async { settings.paperCols = c.clamp(20, 64).toInt(); await _saveSettings(); notifyListeners(); }
-  Future<void> setAdminPin(String newPin) async {
-    settings.pinHash = _fnv64(newPin);
-    await _saveSettings();
-    notifyListeners();
-  }
-
-  Future<bool> testPrinterConnectivity({String? ip, int? port}) async {
-    final host = (ip ?? settings.printerIp);
-    final prt  = (port ?? settings.printerPort);
-    try {
-      final s = await Socket.connect(host, prt, timeout: const Duration(seconds: 2));
-      await s.close();
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<void> _loadProductsFromPrefs(SharedPreferences sp) async {
-    final s = sp.getString('productsJson');
-    if (s == null) return;
-    final list = (jsonDecode(s) as List)
-        .map((e) => ProductJson.fromJson(e as Map<String, dynamic>))
-        .toList();
-    products..clear()..addAll(list);
-  }
-
-  Future<void> _saveProductsToPrefs() async {
-    final sp = await SharedPreferences.getInstance();
-    final data = products.map((p) => p.toJson()).toList();
-    await sp.setString('productsJson', jsonEncode(data));
-  }
-
-  Future<void> _loadOrdersFromPrefs(SharedPreferences sp) async {
-    final s = sp.getString('ordersJson');
-    if (s == null) return;
-    final list = (jsonDecode(s) as List)
-        .map((e) => SavedOrderJson.fromJson(e as Map<String, dynamic>))
-        .toList();
-    orders..clear()..addAll(list);
-  }
-
-  Future<void> _saveOrdersToPrefs() async {
-    final sp = await SharedPreferences.getInstance();
-    final data = orders.map((o) => o.toJson()).toList();
-    await sp.setString('ordersJson', jsonEncode(data));
   }
 
   Future<void> setPrepMinutes(int m) async {
@@ -239,20 +120,14 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addProduct(Product p) { products.add(p); _saveProductsToPrefs(); notifyListeners(); }
-  void replaceProductAt(int i, Product p) { products[i] = p; _saveProductsToPrefs(); notifyListeners(); }
+  void addProduct(Product p) { products.add(p); notifyListeners(); }
+  void replaceProductAt(int i, Product p) { products[i] = p; notifyListeners(); }
 
-  void addLineToCart(Product p, Map<String, List<OptionItem>> picked, {int qty = 1}) {
+  void addLineToCart(Product p, Map<String, List<OptionItem>> picked) {
     final deep = { for (final e in picked.entries) e.key: List<OptionItem>.from(e.value) };
-    cart.add(CartLine(product: p, picked: deep, qty: qty.clamp(1, 999).toInt()));
+    cart.add(CartLine(product: p, picked: deep));
     notifyListeners();
   }
-  void updateCartQtyAt(int i, int newQty) {
-    if (i<0 || i>=cart.length) return;
-    cart[i].qty = newQty.clamp(1, 999).toInt();
-    notifyListeners();
-  }
-
   void removeCartLineAt(int i) { if (i>=0 && i<cart.length) { cart.removeAt(i); notifyListeners(); } }
   void clearCart() { cart.clear(); notifyListeners(); }
 
@@ -262,7 +137,7 @@ class AppState extends ChangeNotifier {
       for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
     };
     final p = cart[i].product;
-    cart[i] = CartLine(product: p, picked: deep, qty: cart[i].qty);
+    cart[i] = CartLine(product: p, picked: deep);
     notifyListeners();
   }
 
@@ -271,18 +146,10 @@ class AppState extends ChangeNotifier {
     final deepLines = cart.map((l) => CartLine(
       product: l.product,
       picked: { for (final e in l.picked.entries) e.key: List<OptionItem>.from(e.value) },
-      qty: l.qty,
     )).toList();
 
-    int maxPrep = prepMinutes;
-    for (final line in cart) {
-      if (line.product.prepMinutes != null && line.product.prepMinutes! > maxPrep) {
-        maxPrep = line.product.prepMinutes!;
-      }
-    }
-
     final now   = DateTime.now();
-    final ready = now.add(Duration(minutes: maxPrep));
+    final ready = now.add(Duration(minutes: prepMinutes));
 
     orders.add(SavedOrder(
       id: now.millisecondsSinceEpoch.toString(),
@@ -292,11 +159,9 @@ class AppState extends ChangeNotifier {
       customer: customer,
     ));
     cart.clear();
-    _saveOrdersToPrefs();
     notifyListeners();
   }
-
-  void clearOrders() { orders.clear(); _saveOrdersToPrefs(); notifyListeners(); }
+  void clearOrders() { orders.clear(); notifyListeners(); }
 }
 
 /* InheritedNotifier: global state erişimi */
@@ -311,8 +176,8 @@ class AppScope extends InheritedNotifier<AppState> {
 }
 
 /* =======================
-    HOME (4 sekme)
-    ======================= */
+    HOME (4 sekme)
+    ======================= */
 class Home extends StatefulWidget {
   const Home({super.key});
   @override
@@ -320,7 +185,251 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
+  bool _seeded = false;
   int index = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_seeded) return;
+    _seeded = true;
+
+    final app = AppScope.of(context);
+    if (app.products.isEmpty) {
+      final products = <Product>[
+        Product(name: 'Sandwich', groups: [
+          OptionGroup(
+            id: 'type_sand', title: 'Sandwich', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'kebab',     label: 'Kebab',        price: 8.90),
+              OptionItem(id: 'poulet',    label: 'Poulet',       price: 8.90),
+              OptionItem(id: 'steak',     label: 'Steak hache',  price: 8.90),
+              OptionItem(id: 'vege',      label: 'Vegetarien',   price: 8.90),
+              OptionItem(id: 'berlineur', label: 'Berlineur',    price: 10.90),
+            ],
+          ),
+          OptionGroup(
+            id: 'pain', title: 'Pain', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'pita',    label: 'Pain pita', price: 0.00),
+              OptionItem(id: 'galette', label: 'Galette',   price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'crudites',
+            title: 'Crudites / Retirer (max 4)',
+            multiple: true,
+            minSelect: 0,
+            maxSelect: 4,
+            items: [
+              OptionItem(id: 'sans_crudites', label: 'Sans crudites', price: 0),
+              OptionItem(id: 'sans_tomates', label: 'Sans tomates', price: 0),
+              OptionItem(id: 'sans_salade', label: 'Sans salade', price: 0),
+              OptionItem(id: 'sans_oignons', label: 'Sans oignons', price: 0),
+              OptionItem(id: 'sans_cornichons', label: 'Sans cornichons', price: 0),
+            ],
+          ),
+          OptionGroup(
+            id: 'supp', title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3,
+            items: [
+              OptionItem(id: 'cheddar',        label: 'Cheddar',                      price: 1.50),
+              OptionItem(id: 'mozzarella',     label: 'Mozzarella rapee',             price: 1.50),
+              OptionItem(id: 'feta',           label: 'Feta',                         price: 1.50),
+              OptionItem(id: 'porc',           label: 'Poitrine de porc fume',        price: 1.50),
+              OptionItem(id: 'chevre',         label: 'Chevre',                       price: 1.50),
+              OptionItem(id: 'legumes',        label: 'Legumes grilles',              price: 1.50),
+              OptionItem(id: 'oeuf',           label: 'Oeuf',                         price: 1.50),
+              OptionItem(id: 'double_cheddar', label: 'Double Cheddar',               price: 3.00),
+              OptionItem(id: 'double_mozza',   label: 'Double Mozzarella rapee',      price: 3.00),
+              OptionItem(id: 'double_porc',    label: 'Double Poitrine de porc fume', price: 3.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'sauces', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
+            items: [
+              OptionItem(id: 'sans_sauce', label: 'Sans sauce',            price: 0.00),
+              OptionItem(id: 'blanche',    label: 'Sauce blanche maison',  price: 0.00),
+              OptionItem(id: 'ketchup',    label: 'Ketchup',               price: 0.00),
+              OptionItem(id: 'mayo',       label: 'Mayonnaise',            price: 0.00),
+              OptionItem(id: 'algerienne', label: 'Algerienne',            price: 0.00),
+              OptionItem(id: 'bbq',        label: 'Barbecue',              price: 0.00),
+              OptionItem(id: 'bigburger',  label: 'Big Burger',            price: 0.00),
+              OptionItem(id: 'harissa',    label: 'Harissa',               price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'formule', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'seul',    label: 'Seul',                     price: 0.00),
+              OptionItem(id: 'frites',  label: 'Avec frites',              price: 1.00),
+              OptionItem(id: 'boisson', label: 'Avec boisson',             price: 1.00),
+              OptionItem(id: 'menu',    label: 'Avec frites et boisson',   price: 2.00),
+            ],
+          ),
+        ]),
+        Product(name: 'Tacos', groups: [
+          OptionGroup(
+            id: 'type_tacos', title: 'Taille', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'm', label: 'M', price: 8.50),
+              OptionItem(id: 'l', label: 'L', price: 10.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'viande_tacos', title: 'Viande', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'kebab',  label: 'Kebab',  price: 0.00),
+              OptionItem(id: 'poulet', label: 'Poulet', price: 0.00),
+              OptionItem(id: 'steak',  label: 'Steak',  price: 0.00),
+              OptionItem(id: 'vege',   label: 'Vegetarien', price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'supp_tacos', title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3,
+            items: [
+              OptionItem(id: 'cheddar',    label: 'Cheddar',          price: 1.50),
+              OptionItem(id: 'mozzarella', label: 'Mozzarella rapee', price: 1.50),
+              OptionItem(id: 'oeuf',       label: 'Oeuf',             price: 1.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
+            items: [
+              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
+              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
+              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
+              OptionItem(id: 'algerienne', label: 'Algerienne',           price: 0.00),
+              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
+              OptionItem(id: 'harissa',    label: 'Harissa',              price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'formule_tacos', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'seul',   label: 'Seul',                   price: 0.00),
+              OptionItem(id: 'menu',   label: 'Avec frites et boisson', price: 2.00),
+            ],
+          ),
+        ]),
+        Product(name: 'Burgers', groups: [
+          OptionGroup(
+            id: 'type_burger', title: 'Burger', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'classic',  label: 'Classic',         price: 7.90),
+              OptionItem(id: 'double',   label: 'Double cheese',   price: 9.90),
+              OptionItem(id: 'chicken',  label: 'Chicken',         price: 8.50),
+              OptionItem(id: 'veggie',   label: 'Veggie',          price: 8.50),
+            ],
+          ),
+          OptionGroup(
+            id: 'sauce_burger', title: 'Sauces', multiple: true, minSelect: 0, maxSelect: 2,
+            items: [
+              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
+              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
+              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
+              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'formule_burger', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'seul',    label: 'Seul',                    price: 0.00),
+              OptionItem(id: 'frites',  label: 'Avec frites',             price: 1.00),
+              OptionItem(id: 'menu',    label: 'Avec frites et boisson',  price: 2.00),
+            ],
+          ),
+        ]),
+        Product(name: 'Box', groups: [
+          OptionGroup(
+            id: 'type_box', title: 'Choix box', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'tenders6', label: '6 Tenders',  price: 6.50),
+              OptionItem(id: 'nuggets9', label: '9 Nuggets',  price: 7.90),
+              OptionItem(id: 'wings8',   label: '8 Wings',    price: 7.90),
+              OptionItem(id: 'mix12',    label: 'Mix 12 pcs', price: 9.90),
+            ],
+          ),
+          OptionGroup(
+            id: 'sauce_box', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
+            items: [
+              OptionItem(id: 'ketchup', label: 'Ketchup',   price: 0.00),
+              OptionItem(id: 'mayo',    label: 'Mayonnaise',price: 0.00),
+              OptionItem(id: 'bbq',     label: 'Barbecue',  price: 0.00),
+              OptionItem(id: 'blanche', label: 'Sauce blanche maison', price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'plus_box', title: 'Accompagnement', multiple: true, minSelect: 0, maxSelect: 2,
+            items: [
+              OptionItem(id: 'frites',  label: 'Frites',  price: 2.00),
+              OptionItem(id: 'boisson', label: 'Boisson', price: 1.50),
+            ],
+          ),
+        ]),
+        Product(name: 'Menu Enfant', groups: [
+          OptionGroup(
+            id: 'choix_enfant', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'cheese_menu',  label: 'Cheeseburger avec frites', price: 7.90),
+              OptionItem(id: 'nuggets_menu', label: '5 Nuggets et frites',      price: 7.90),
+            ],
+          ),
+          OptionGroup(
+            id: 'crudites_enfant', title: 'Crudites', multiple: true, minSelect: 0, maxSelect: 3,
+            items: [
+              OptionItem(id: 'avec',          label: 'Avec crudites',  price: 0.00),
+              OptionItem(id: 'sans_salade',   label: 'Sans salade',    price: 0.00),
+              OptionItem(id: 'sans_cornichon',label: 'Sans cornichon', price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'sauce_enfant', title: 'Sauces', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'sans_sauce', label: 'Sans sauce',           price: 0.00),
+              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
+              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
+              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'boisson_enfant', title: 'Boisson', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'sans_boisson', label: 'Sans boisson', price: 0.00),
+              OptionItem(id: 'avec_boisson', label: 'Avec boisson', price: 1.00),
+            ],
+          ),
+        ]),
+        Product(name: 'Petit Faim', groups: [
+          OptionGroup(
+            id: 'choix_pf', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 'frites_p',  label: 'Frites petite portion', price: 3.00),
+              OptionItem(id: 'frites_g',  label: 'Frites grande portion', price: 6.00),
+              OptionItem(id: 'tenders3',  label: '3 Tenders', price: 0.00),
+              OptionItem(id: 'tenders6',  label: '6 Tenders', price: 0.00),
+              OptionItem(id: 'nuggets6',  label: '6 Nuggets', price: 0.00),
+              OptionItem(id: 'nuggets12', label: '12 Nuggets', price: 0.00),
+            ],
+          ),
+          OptionGroup(
+            id: 'sauce_pf', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
+            items: [
+              OptionItem(id: 'sans_sauce', label: 'Sans sauce',           price: 0.00),
+              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
+              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
+              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
+              OptionItem(id: 'algerienne', label: 'Algerienne',           price: 0.00),
+              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
+              OptionItem(id: 'bigburger',  label: 'Big Burger',           price: 0.00),
+              OptionItem(id: 'harissa',    label: 'Harissa',              price: 0.00),
+            ],
+          ),
+        ]),
+      ];
+
+      app.products.addAll(products);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -336,16 +445,7 @@ class _HomeState extends State<Home> {
     ];
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('BISCORNUE'),
-        actions: [
-          IconButton(
-            tooltip: 'Paramètres',
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsPage())),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('BISCORNUE')),
       body: pages[index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
@@ -368,7 +468,7 @@ class _HomeState extends State<Home> {
                   ),
               ],
             ),
-            label: 'Panier (${_money(totalCart)})',
+            label: 'Panier (€${totalCart.toStringAsFixed(2)})',
           ),
           const NavigationDestination(icon: Icon(Icons.receipt_long), label: 'Commandes'),
         ],
@@ -385,8 +485,8 @@ class _HomeState extends State<Home> {
 }
 
 /* =======================
-    PAGE 1 : PRODUITS
-    ======================= */
+    PAGE 1 : PRODUITS
+    ======================= */
 class ProductsPage extends StatelessWidget {
   const ProductsPage({super.key});
 
@@ -490,7 +590,6 @@ class _ProductCard extends StatelessWidget {
                 onPressed: () async {
                   final ok = await _askPin(context);
                   if (!ok) return;
-                  if (!context.mounted) return;
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => CreateProductPage(
@@ -510,8 +609,8 @@ class _ProductCard extends StatelessWidget {
 }
 
 /* =======================
-    PAGE 2 : CRÉER + DÜZENLE
-    ======================= */
+    PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
+    ======================= */
 class CreateProductPage extends StatefulWidget {
   final void Function(int) onGoToTab;
   final int? editIndex;
@@ -521,8 +620,7 @@ class CreateProductPage extends StatefulWidget {
 }
 
 class _CreateProductPageState extends State<CreateProductPage> {
-  final TextEditingController nameCtrl = TextEditingController();
-  final TextEditingController productPrepCtrl = TextEditingController();
+  final TextEditingController nameCtrl = TextEditingController(text: 'Sandwich');
   final List<OptionGroup> editingGroups = [];
   int? editingIndex;
   final TextEditingController delayCtrl = TextEditingController();
@@ -543,25 +641,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
     if (idx < 0 || idx >= app.products.length) return;
     final p = app.products[idx];
     nameCtrl.text = p.name;
-    productPrepCtrl.text = p.prepMinutes?.toString() ?? '';
     editingGroups..clear()..addAll(p.groups.map(_copyGroup));
     setState(() => editingIndex = idx);
-  }
-  
-  Future<bool> _confirmDiscard(BuildContext context) async {
-    final hasChanges = nameCtrl.text.trim().isNotEmpty || editingGroups.isNotEmpty;
-    if (!hasChanges) return true;
-    return await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Annuler les modifications ?'),
-        content: const Text('Les changements non enregistrés seront perdus.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Non')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Oui')),
-        ],
-      ),
-    ) ?? false;
   }
 
   OptionGroup _copyGroup(OptionGroup g) => OptionGroup(
@@ -577,33 +658,21 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
   void saveProduct() {
     final app = AppScope.of(context);
-    if (nameCtrl.text.trim().isEmpty) { _snack(context, 'Le nom du produit est requis.'); return; }
+    if (nameCtrl.text.trim().isEmpty) { _snack(context, 'Nom du produit requis.'); return; }
     for (final g in editingGroups) {
-      if (g.title.trim().isEmpty) { _snack(context, 'Le titre du groupe est manquant.'); return; }
+      if (g.title.trim().isEmpty) { _snack(context, 'Titre du groupe manquant.'); return; }
       if (g.items.isEmpty) { _snack(context, 'Ajoutez au moins une option dans "${g.title}".'); return; }
       if (g.minSelect < 0 || g.maxSelect < 1 || g.minSelect > g.maxSelect) {
         _snack(context, 'Règles min/max invalides dans "${g.title}".'); return;
       }
       if (!g.multiple && (g.minSelect != 1 || g.maxSelect != 1)) {
-        _snack(context, 'Un choix unique doit avoir min=1 et max=1 (${g.title}).'); return;
+        _snack(context, 'Choix unique doit avoir min=1 et max=1 (${g.title}).'); return;
       }
     }
-    
-    final int? productPrep = int.tryParse(productPrepCtrl.text.trim());
-
-    final p = Product(
-      name: nameCtrl.text.trim(), 
-      groups: List.of(editingGroups),
-      prepMinutes: productPrep,
-    );
-
+    final p = Product(name: nameCtrl.text.trim(), groups: List.of(editingGroups));
     if (editingIndex == null) { app.addProduct(p); _snack(context, 'Produit créé.'); }
     else { app.replaceProductAt(editingIndex!, p); _snack(context, 'Produit mis à jour.'); }
-    
-    nameCtrl.clear();
-    productPrepCtrl.clear();
-    editingGroups.clear(); 
-    setState(() => editingIndex = null);
+    nameCtrl.text = ''; editingGroups.clear(); setState(() => editingIndex = null);
 
     if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
   }
@@ -615,24 +684,17 @@ class _CreateProductPageState extends State<CreateProductPage> {
       padding: const EdgeInsets.all(12),
       children: [
         Row(children: [
-          IconButton(icon: const Icon(Icons.arrow_back), onPressed: () async {
-            if (await _confirmDiscard(context)) {
-              if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
-            }
+          IconButton(icon: const Icon(Icons.arrow_back), onPressed: () {
+            if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
           }, tooltip: 'Retour'),
           const SizedBox(width: 8),
           Text(editingIndex == null ? 'Créer un produit' : 'Modifier un produit',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const Spacer(),
           TextButton.icon(
-            onPressed: () async {
-              if (await _confirmDiscard(context)) {
-                nameCtrl.clear();
-                productPrepCtrl.clear();
-                editingGroups.clear(); 
-                setState(() => editingIndex = null);
-                if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
-              }
+            onPressed: () {
+              nameCtrl.text = ''; editingGroups.clear(); setState(() => editingIndex = null);
+              if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
             },
             icon: const Icon(Icons.close), label: const Text('Annuler'),
           ),
@@ -651,9 +713,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
                   child: TextField(
                     controller: delayCtrl,
                     keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     decoration: const InputDecoration(
-                      labelText: 'Délai de préparation global (minutes)',
+                      labelText: 'Délai de préparation (minutes)',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -667,7 +728,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                       return;
                     }
                     app.setPrepMinutes(m);
-                    _snack(context, 'Délai enregistré : $m min.');
+                    _snack(context, 'Délai enregistré: $m min');
                   },
                   child: const Text('Enregistrer'),
                 ),
@@ -698,35 +759,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
           ),
           const SizedBox(height: 16), const Divider(), const SizedBox(height: 12),
         ],
-        
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Nom du produit',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 150,
-              child: TextField(
-                controller: productPrepCtrl,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: 'Délai (min)',
-                  hintText: 'Optionnel',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ),
-          ],
-        ),
+
+        TextField(controller: nameCtrl,
+          decoration: const InputDecoration(labelText: 'Nom du produit', border: OutlineInputBorder())),
         const SizedBox(height: 12),
         Row(children: [
           FilledButton.icon(onPressed: addGroup, icon: const Icon(Icons.add), label: const Text('Ajouter un groupe')),
@@ -775,23 +810,16 @@ class _GroupEditorState extends State<_GroupEditor> {
     maxCtrl.text = widget.group.maxSelect.toString();
   }
 
-  int get _mode => widget.group.multiple ? 1 : 0;
-  set _mode(int v) {
-    widget.group.multiple = (v == 1);
-    if (v == 0) {
-      minCtrl.text = '1';
-      maxCtrl.text = '1';
-    }
-    apply();
-    setState(() {});
-  }
-
   void apply() {
     widget.group.title = titleCtrl.text.trim();
+    widget.group.multiple = _mode == 1;
     widget.group.minSelect = int.tryParse(minCtrl.text) ?? 0;
     widget.group.maxSelect = int.tryParse(maxCtrl.text) ?? 1;
     widget.onChanged();
   }
+
+  int get _mode => widget.group.multiple ? 1 : 0;
+  set _mode(int v) { if (v == 0) { minCtrl.text = '1'; maxCtrl.text = '1'; } apply(); setState(() {}); }
 
   void addOption() {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
@@ -913,8 +941,8 @@ class _OptionEditorState extends State<_OptionEditor> {
 }
 
 /* =======================
-    WIZARD
-    ======================= */
+    WIZARD (BUTONLAR İÇERİKTE, BİRAZ DAHA YUKARIDA)
+    ======================= */
 class OrderWizard extends StatefulWidget {
   final Product product;
   final Map<String, List<OptionItem>>? initialPicked;
@@ -1014,21 +1042,18 @@ class _OrderWizardState extends State<OrderWizard> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 96.0),
-              child: isSummary
-                  ? _Summary(product: widget.product, picked: picked, total: total)
-                  : _GroupStep(
-                      group: groups[step],
-                      picked: picked,
-                      toggleSingle: _toggleSingle,
-                      toggleMulti: _toggleMulti,
-                    ),
-            ),
+            child: isSummary
+                ? _Summary(product: widget.product, picked: picked, total: total)
+                : _GroupStep(
+                    group: groups[step],
+                    picked: picked,
+                    toggleSingle: _toggleSingle,
+                    toggleMulti: _toggleMulti,
+                  ),
           ),
           Positioned(
             left: 16,
-            bottom: 24 + MediaQuery.of(context).padding.bottom,
+            bottom: 16 + MediaQuery.of(context).padding.bottom,
             child: FloatingActionButton.large(
               heroTag: 'prevFab',
               onPressed: step == 0
@@ -1039,7 +1064,7 @@ class _OrderWizardState extends State<OrderWizard> {
           ),
           Positioned(
             right: 16,
-            bottom: 24 + MediaQuery.of(context).padding.bottom,
+            bottom: 16 + MediaQuery.of(context).padding.bottom,
             child: FloatingActionButton.large(
               heroTag: 'nextFab',
               onPressed: () {
@@ -1118,7 +1143,7 @@ class _GroupStep extends StatelessWidget {
               crossAxisCount: cross,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 1,
+              childAspectRatio: 1, // KARE
             ),
             itemCount: group.items.length,
             itemBuilder: (_, i) {
@@ -1195,7 +1220,7 @@ class _GroupStep extends StatelessWidget {
                                 const SizedBox(height: 6),
                                 if (it.price != 0)
                                   Text(
-                                    '+ ${_money(it.price)}',
+                                    '+ ${_formatEuro(it.price)}',
                                     style: TextStyle(
                                       fontSize: 14,
                                       color: color.onSurfaceVariant,
@@ -1239,14 +1264,14 @@ class _Summary extends StatelessWidget {
             for (final it in (picked[g.id] ?? const <OptionItem>[]))
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Text('• ${it.label}'),
-                Text(_money(it.price)),
+                Text(it.price == 0 ? '€0.00' : '€${it.price.toStringAsFixed(2)}'),
               ]),
             const SizedBox(height: 8),
             const Divider(),
           ],
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           const Text('SOUS-TOTAL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          Text(_money(total), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text('€${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         ]),
         const SizedBox(height: 24),
       ],
@@ -1255,8 +1280,8 @@ class _Summary extends StatelessWidget {
 }
 
 /* =======================
-    PAGE 3 : PANIER
-    ======================= */
+    PAGE 3 : PANIER
+    ======================= */
 class CartPage extends StatelessWidget {
   const CartPage({super.key});
   @override
@@ -1283,20 +1308,7 @@ class CartPage extends StatelessWidget {
             const Text('Panier', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Spacer(),
             TextButton.icon(
-              onPressed: () async {
-                final ok = await showDialog<bool>(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: const Text('Vider le panier ?'),
-                    content: const Text('Toutes les lignes seront supprimées.'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
-                      FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Vider')),
-                    ],
-                  ),
-                );
-                if (ok == true) app.clearCart();
-              },
+              onPressed: () => app.clearCart(),
               icon: const Icon(Icons.delete_sweep),
               label: const Text('Vider'),
             ),
@@ -1312,7 +1324,7 @@ class CartPage extends StatelessWidget {
               final l = lines[i];
               return ListTile(
                 leading: const Icon(Icons.fastfood),
-                title: Text('${l.product.name} • ${_money(l.total)}'),
+                title: Text('${l.product.name} • €${l.total.toStringAsFixed(2)}'),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1320,27 +1332,15 @@ class CartPage extends StatelessWidget {
                       if ((l.picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
                         Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
                         for (final it in (l.picked[g.id] ?? const <OptionItem>[]))
-                          Text('• ${it.label}${it.price == 0 ? '' : ' (+${_money(it.price)})'}'),
+                          Text('• ${it.label}${it.price == 0 ? '' : ' (+€${it.price.toStringAsFixed(2)})'}'),
                       ],
                   ],
                 ),
                 trailing: Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 0,
+                  spacing: 4,
                   children: [
-                    Row(mainAxisSize: MainAxisSize.min, children: [
-                      IconButton(
-                        icon: const Icon(Icons.remove_circle_outline),
-                        onPressed: () => app.updateCartQtyAt(i, l.qty - 1),
-                      ),
-                      Text('${l.qty}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      IconButton(
-                        icon: const Icon(Icons.add_circle_outline),
-                        onPressed: () => app.updateCartQtyAt(i, l.qty + 1),
-                      ),
-                    ]),
                     IconButton(
-                      tooltip: 'Modifier',
+                      tooltip: 'Düzenle',
                       icon: const Icon(Icons.edit_outlined),
                       onPressed: () async {
                         final result = await Navigator.push<Map<String, List<OptionItem>>>(
@@ -1356,13 +1356,13 @@ class CartPage extends StatelessWidget {
                         if (result != null) {
                           app.updateCartLineAt(i, result);
                           if (context.mounted) {
-                            _snack(context, 'Ligne mise à jour.');
+                            _snack(context, 'Satır güncellendi.');
                           }
                         }
                       },
                     ),
                     IconButton(
-                      tooltip: 'Supprimer',
+                      tooltip: 'Sil',
                       icon: const Icon(Icons.delete_outline),
                       onPressed: () => app.removeCartLineAt(i),
                     ),
@@ -1377,7 +1377,7 @@ class CartPage extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             const Text('TOTAL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text(_money(total), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('€${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ]),
         ),
         Padding(
@@ -1386,7 +1386,6 @@ class CartPage extends StatelessWidget {
             onPressed: () async {
               final name = await _askCustomerName(context);
               if (name == null) return;
-              if (!context.mounted) return;
               final app = AppScope.of(context);
               final ready = DateTime.now().add(Duration(minutes: app.prepMinutes));
               app.finalizeCartToOrder(customer: name);
@@ -1405,8 +1404,8 @@ class CartPage extends StatelessWidget {
 }
 
 /* =======================
-    PAGE 4 : COMMANDES + YAZDIRMA
-    ======================= */
+    PAGE 4 : COMMANDES + YAZDIRMA
+    ======================= */
 class OrdersPage extends StatelessWidget {
   const OrdersPage({super.key});
   @override
@@ -1435,32 +1434,18 @@ class OrdersPage extends StatelessWidget {
             TextButton.icon(
               onPressed: () async {
                 final pinOk = await _askPin(context); if (!pinOk) return;
-                if (!context.mounted) return;
-                final choice = await showDialog<int>(
+                final ok = await showDialog<bool>(
                   context: context,
                   builder: (_) => AlertDialog(
                     title: const Text('Fin de journée ?'),
-                    content: const Text('Voulez-vous imprimer un rapport avant de supprimer toutes les commandes ?'),
+                    content: const Text('Toutes les commandes seront supprimées. Action irréversible.'),
                     actions: [
-                      TextButton(onPressed: () => Navigator.pop(context, 0), child: const Text('Annuler')),
-                      FilledButton.tonal(onPressed: () => Navigator.pop(context, 1), child: const Text('Imprimer Rapport')),
-                      FilledButton(onPressed: () => Navigator.pop(context, 2), child: const Text('Supprimer Tout')),
+                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
+                      FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Supprimer')),
                     ],
                   ),
                 );
-                if (choice == 1) { 
-                  try {
-                    await printDailyReport(context);
-                    if (!context.mounted) return;
-                    _snack(context, 'Rapport envoyé à l\'imprimante.');
-                  } catch (e) {
-                    if (context.mounted) {
-                      _snack(context, 'Erreur d\'impression: $e');
-                    }
-                  }
-                } else if (choice == 2) { 
-                  app.clearOrders();
-                }
+                if (ok == true) app.clearOrders();
               },
               icon: const Icon(Icons.delete_forever),
               label: const Text('Journée terminée'),
@@ -1478,19 +1463,16 @@ class OrdersPage extends StatelessWidget {
               final who = o.customer.isEmpty ? '' : ' — ${o.customer}';
               return ListTile(
                 leading: const Icon(Icons.receipt),
-                title: Text('Commande$who • ${o.lines.length} article(s) • ${_money(o.total)}'),
+                title: Text('Commande$who • ${o.lines.length} article(s) • €${o.total.toStringAsFixed(2)}'),
                 subtitle: Text('Prêt à ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}'),
                 trailing: IconButton(
                   icon: const Icon(Icons.print_outlined),
                   onPressed: () async {
                     try {
-                      await printOrderAndroid(o, context);
-                      if (!context.mounted) return;
-                      _snack(context, 'Ticket envoyé à l\'imprimante.');
+                      await printOrderAndroid(o);
+                      _snack(context, 'Fiş yazıcıya gönderildi.');
                     } catch (e) {
-                      if (context.mounted) {
-                        _snack(context, 'Erreur d\'impression : $e. L\'IP/port et le réseau Wi-Fi sont-ils corrects ?');
-                      }
+                      _snack(context, 'Yazdırma hatası: $e');
                     }
                   },
                   tooltip: 'Imprimer',
@@ -1516,7 +1498,7 @@ class OrdersPage extends StatelessWidget {
                                   style: const TextStyle(fontWeight: FontWeight.bold)),
                             ),
                             for (int idx = 0; idx < o.lines.length; idx++) ...[
-                              Text('Article ${idx+1}: ${o.lines[idx].product.name} (x${o.lines[idx].qty})',
+                              Text('Article ${idx+1}: ${o.lines[idx].product.name}',
                                   style: const TextStyle(fontWeight: FontWeight.bold)),
                               for (final g in o.lines[idx].product.groups)
                                 if ((o.lines[idx].picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
@@ -1526,7 +1508,7 @@ class OrdersPage extends StatelessWidget {
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
                                         Text('• ${it.label}'),
-                                        Text(_money(it.price)),
+                                        Text(it.price == 0 ? '€0.00' : '€${it.price.toStringAsFixed(2)}'),
                                       ],
                                     ),
                                 ],
@@ -1536,7 +1518,7 @@ class OrdersPage extends StatelessWidget {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold)),
-                                Text(_money(o.total), style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text('€${o.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ],
@@ -1546,15 +1528,13 @@ class OrdersPage extends StatelessWidget {
                         TextButton(
                           onPressed: () async {
                             try {
-                              await printOrderAndroid(o, context);
+                              await printOrderAndroid(o);
                               if (context.mounted) {
-                                Navigator.pop(context);
-                                _snack(context, 'Ticket envoyé à l\'imprimante.');
+                                Navigator.pop(context); // Diyalogu kapat
+                                _snack(context, 'Fiş yazıcıya gönderildi.');
                               }
                             } catch (e) {
-                               if (context.mounted) {
-                                _snack(context, 'Erreur d\'impression : $e');
-                               }
+                               _snack(context, 'Yazdırma hatası: $e');
                             }
                           },
                           child: const Text('Imprimer'),
@@ -1574,10 +1554,9 @@ class OrdersPage extends StatelessWidget {
 }
 
 /* =======================
-    DİYALOGLAR & UTIL
-    ======================= */
+    DİYALOGLAR & UTIL
+    ======================= */
 Future<bool> _askPin(BuildContext context) async {
-  final app = AppScope.of(context);
   final ctrl = TextEditingController();
   final ok = await showDialog<bool>(
     context: context,
@@ -1589,16 +1568,14 @@ Future<bool> _askPin(BuildContext context) async {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Valider')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim() == _ADMIN_PIN), child: const Text('Valider')),
       ],
     ),
   );
-  if (ok == true) {
-    final valid = _fnv64(ctrl.text.trim()) == app.settings.pinHash;
-    if (!valid && context.mounted) { _snack(context, 'Code incorrect.'); }
-    return valid;
+  if (ok != true) {
+    _snack(context, 'Code incorrect.');
   }
-  return false;
+  return ok == true;
 }
 
 Future<String?> _askCustomerName(BuildContext context) async {
@@ -1647,7 +1624,7 @@ Future<String?> _askCustomerName(BuildContext context) async {
   );
 }
 
-void _snack(BuildContext context, String msg, {int ms = 1500}) {
+void _snack(BuildContext context, String msg, {int ms = 1200}) {
   if (!context.mounted) return;
   final bottomInset = MediaQuery.of(context).padding.bottom;
   final bottomBar = kBottomNavigationBarHeight;
@@ -1671,6 +1648,9 @@ void _showWarn(BuildContext context, String msg) {
   _snack(context, msg);
 }
 
+/* =======================
+    Choisir butonu (kırılma yok)
+    ======================= */
 Widget choisirButton(VoidCallback onTap, BuildContext context) {
   final color = Theme.of(context).colorScheme;
   return Material(
@@ -1688,46 +1668,21 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 }
 
 // ==================================================
-// YAZDIRMA YARDIMCILARI
+// YENİ, PAKETSİZ YAZDIRMA YARDIMCILARI
 // ==================================================
 
 String _two(int n) => n.toString().padLeft(2, '0');
-String _money(double v) => '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
 
-String _rightLine(String left, String right, {required int width}) {
-  left  = left.replaceAll('\n', ' ');
+String _money(double v) =>
+    '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
+
+String _rightLine(String left, String right, {int width = 32}) {
+  left = left.replaceAll('\n', ' ');
   right = right.replaceAll('\n', ' ');
-  if (right.length >= width) {
-    return right.substring(0, width);
+  if (left.length + right.length > width) {
+    left = left.substring(0, width - right.length);
   }
-  final space = width - right.length;
-  if (left.length >= space) {
-    left = left.substring(0, (space - 1).clamp(0, space));
-  }
-  return left + ' ' * (space - left.length) + right;
-}
-
-List<String> _wrapLeftRight(String left, String right, {required int width}) {
-  final lines = <String>[];
-  if (left.length + 1 + right.length <= width) {
-    lines.add(_rightLine(left, right, width: width));
-    return lines;
-  }
-  int spaceForLeft = width - right.length - 1;
-  if (spaceForLeft < 1) spaceForLeft = width;
-  if (left.length > spaceForLeft) {
-    lines.add(_rightLine(left.substring(0, spaceForLeft), right, width: width));
-    left = left.substring(spaceForLeft).trimLeft();
-  } else {
-    lines.add(_rightLine(left, right, width: width));
-    return lines;
-  }
-  while (left.isNotEmpty) {
-    final take = left.length > width ? width : left.length;
-    lines.add(left.substring(0, take));
-    left = left.substring(take);
-  }
-  return lines;
+  return left + ' ' * (width - left.length - right.length) + right;
 }
 
 void _cmd(Socket s, List<int> bytes) => s.add(bytes);
@@ -1739,337 +1694,90 @@ void _alignCenter(Socket s) => _cmd(s, [27, 97, 1]);
 void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
 
 void _writeCp1252(Socket socket, String text) {
-  const map = {
-    0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87,
-    0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A, 0x2039: 0x8B, 0x0152: 0x8C,
-    0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93, 0x201D: 0x94,
-    0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97, 0x02DC: 0x98, 0x2122: 0x99,
-    0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C, 0x017E: 0x9E, 0x0178: 0x9F,
-    0x00E0: 0xE0, 0x00E1: 0xE1, 0x00E2: 0xE2, 0x00E7: 0xE7, 0x00E8: 0xE8, 0x00E9: 0xE9,
-    0x00EA: 0xEA, 0x00EB: 0xEB, 0x00EE: 0xEE, 0x00EF: 0xEF, 0x00F4: 0xF4, 0x00F9: 0xF9,
-    0x00FB: 0xFB, 0x00FC: 0xFC, 0x00C0: 0xC0, 0x00C2: 0xC2, 0x00C7: 0xC7, 0x00C8: 0xC8,
-    0x00C9: 0xC9, 0x00CA: 0xCA, 0x00CB: 0xCB, 0x00CE: 0xCE, 0x00CF: 0xCF, 0x00D4: 0xD4,
-    0x00D9: 0xD9, 0x00DB: 0xDB, 0x00DC: 0xDC,
-  };
-
   final out = <int>[];
   for (final r in text.runes) {
-    if (r <= 0x7F) { out.add(r); continue; }
-    final mapped = map[r];
-    if (mapped != null) { out.add(mapped); continue; }
-    out.add(0x3F);
+    if (r == 0x20AC) { // €
+      out.add(0x80);
+      continue;
+    }
+    if (r <= 0x7F) { // ASCII
+      out.add(r);
+      continue;
+    }
+    final ch = String.fromCharCode(r);
+    const repl = {
+      'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
+      'ş':'s','Ş':'S','ü':'u','Ü':'U','é':'e','è':'e','ê':'e','á':'a','à':'a','â':'a',
+      'ô':'o','ù':'u','–':'-','—':'-','…':'...',
+      'Œ':'Oe','œ':'oe',
+    };
+    final s = repl[ch] ?? '?';
+    for (final cu in s.codeUnits) {
+      if (cu == 0x20AC) { out.add(0x80); } else { out.add(cu <= 0x7F ? cu : 0x3F); }
+    }
   }
   socket.add(out);
 }
 
-Future<void> printOrderAndroid(SavedOrder o, BuildContext context) async {
-  final app = AppScope.of(context);
-  final cols = app.settings.paperCols;
+Future<void> printOrderAndroid(SavedOrder o) async {
+  final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  Socket? socket;
-  try {
-    socket = await Socket.connect(app.settings.printerIp, app.settings.printerPort, timeout: const Duration(seconds: 5));
+  _cmd(socket, [27, 64]);
+  _cmd(socket, [27, 116, 16]);
 
-    _cmd(socket, [27, 64]);
-    _cmd(socket, [27, 116, 16]);
+  _alignCenter(socket);
+  _size(socket, 17);
+  _boldOn(socket);
+  _writeCp1252(socket, '*** BISCORNUE ***\n');
+  _boldOff(socket);
+  _size(socket, 0);
 
-    _alignCenter(socket);
-    _size(socket, 17); _boldOn(socket);
-    _writeCp1252(socket, '*** BISCORNUE ***\n');
-    _boldOff(socket); _size(socket, 0);
+  if (o.customer.isNotEmpty) {
+    _size(socket, 1);
+    _boldOn(socket);
+    _writeCp1252(socket, 'Client: ${o.customer}\n');
+    _boldOff(socket);
+    _size(socket, 0);
+  }
 
-    if (o.customer.isNotEmpty) {
-      _size(socket, 1); _boldOn(socket);
-      _writeCp1252(socket, 'Client: ${o.customer}\n');
-      _boldOff(socket); _size(socket, 0);
-    }
+  _boldOn(socket);
+  _size(socket, 1);
+  _writeCp1252(socket, 'Pret a: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}\n');
+  _size(socket, 0);
+  _boldOff(socket);
 
-    _boldOn(socket); _size(socket, 1);
-    _writeCp1252(socket, 'Prêt à: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}\n');
-    _size(socket, 0); _boldOff(socket);
+  _alignLeft(socket);
+  _writeCp1252(socket, '------------------------------\n');
 
-    _alignLeft(socket);
-    _writeCp1252(socket, '-' * cols + '\n');
-
-    for (int i = 0; i < o.lines.length; i++) {
-      final l = o.lines[i];
-      final left = 'Article ${i + 1}: ${l.product.name}${l.qty > 1 ? ' x${l.qty}' : ''}';
-      final right = _money(l.total);
-      for (final ln in _wrapLeftRight(left, right, width: cols)) {
-        _writeCp1252(socket, ln + '\n');
-      }
-      for (final g in l.product.groups) {
-        final sel = l.picked[g.id] ?? const <OptionItem>[];
-        if (sel.isNotEmpty) {
-          _writeCp1252(socket, '  ${g.title}:\n');
-          for (final it in sel) { _writeCp1252(socket, '    * ${it.label}\n'); }
+  for (int i = 0; i < o.lines.length; i++) {
+    final l = o.lines[i];
+    _writeCp1252(socket, _rightLine('Item ${i + 1}: ${l.product.name}', _money(l.total)) + '\n');
+    for (final g in l.product.groups) {
+      final sel = l.picked[g.id] ?? const <OptionItem>[];
+      if (sel.isNotEmpty) {
+        _writeCp1252(socket, '  ${g.title}:\n');
+        for (final it in sel) {
+          _writeCp1252(socket, '    * ${it.label}\n');
         }
       }
-      if (i != o.lines.length - 1) {
-        _writeCp1252(socket, '-' * cols + '\n');
-      }
     }
-
-    _writeCp1252(socket, '-' * cols + '\n');
-    _alignRight(socket); _boldOn(socket); _size(socket, 1);
-    for (final ln in _wrapLeftRight('TOTAL', _money(o.total), width: cols)) {
-      _writeCp1252(socket, ln + '\n');
+    if (i != o.lines.length - 1) {
+      _writeCp1252(socket, '--------------------------------\n');
     }
-    _size(socket, 0); _boldOff(socket);
-
-    _cmd(socket, [10, 10, 29, 86, 66, 0]);
-    await socket.flush();
-  } finally {
-    await socket?.close();
-  }
-}
-
-Future<void> printDailyReport(BuildContext context) async {
-  final app = AppScope.of(context);
-  final orders = app.orders;
-  final total = orders.fold<double>(0, (s,o)=> s + o.total);
-  final count = orders.length;
-  final cols = app.settings.paperCols;
-
-  Socket? socket;
-  try {
-    socket = await Socket.connect(app.settings.printerIp, app.settings.printerPort, timeout: const Duration(seconds: 5));
-    _cmd(socket, [27,64]); _cmd(socket, [27,116,16]); _alignCenter(socket); _boldOn(socket); _size(socket, 1);
-    _writeCp1252(socket, '*** RAPPORT JOURNALIER ***\n'); _boldOff(socket); _size(socket,0);
-    _alignLeft(socket); _writeCp1252(socket, '-' * cols + '\n');
-    _writeCp1252(socket, 'Date: ${DateTime.now().toLocal().toString().substring(0, 16)}\n');
-    _writeCp1252(socket, 'Commandes: $count\n');
-    _writeCp1252(socket, 'Chiffre d\'affaires: ${_money(total)}\n');
-    _writeCp1252(socket, '-' * cols + '\n');
-    _cmd(socket, [10,10,29,86,66,0]);
-    await socket.flush();
-  } finally {
-    await socket?.close();
-  }
-}
-
-
-/* =======================
-    JSON KALICILIK YARDIMCILARI
-    ======================= */
-extension ProductJson on Product {
-  Map<String, dynamic> toJson() => {
-    'name': name,
-    'groups': groups.map((g) => g.toJson()).toList(),
-    'prepMinutes': prepMinutes,
-  };
-  static Product fromJson(Map<String, dynamic> j) => Product(
-    name: j['name'] ?? '',
-    groups: (j['groups'] as List? ?? []).map((x) => OptionGroupJson.fromJson(x as Map<String, dynamic>)).toList(),
-    prepMinutes: j['prepMinutes'],
-  );
-}
-
-extension OptionGroupJson on OptionGroup {
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'title': title,
-    'multiple': multiple,
-    'minSelect': minSelect,
-    'maxSelect': maxSelect,
-    'items': items.map((e) => e.toJson()).toList(),
-  };
-  static OptionGroup fromJson(Map<String, dynamic> j) => OptionGroup(
-    id: j['id'],
-    title: j['title'] ?? '',
-    multiple: j['multiple'] ?? false,
-    minSelect: j['minSelect'] ?? 0,
-    maxSelect: j['maxSelect'] ?? 1,
-    items: (j['items'] as List? ?? []).map((x) => OptionItemJson.fromJson(x as Map<String, dynamic>)).toList(),
-  );
-}
-
-extension OptionItemJson on OptionItem {
-  Map<String, dynamic> toJson() => {'id': id, 'label': label, 'price': price};
-  static OptionItem fromJson(Map<String, dynamic> j) =>
-      OptionItem(id: j['id'], label: j['label'] ?? '', price: (j['price'] ?? 0).toDouble());
-}
-
-extension CartLineJson on CartLine {
-  Map<String, dynamic> toJson() => {
-    'product': product.toJson(),
-    'picked': picked.map((k, v) => MapEntry(k, v.map((e)=>e.toJson()).toList())),
-    'qty': qty,
-  };
-  static CartLine fromJson(Map<String, dynamic> j) => CartLine(
-    product: ProductJson.fromJson(j['product'] as Map<String, dynamic>),
-    picked: (j['picked'] as Map<String, dynamic>? ?? {})
-      .map((k, v) => MapEntry(k, (v as List).map((x)=>OptionItemJson.fromJson(x as Map<String, dynamic>)).toList())),
-    qty: (j['qty'] ?? 1) as int,
-  );
-}
-
-extension SavedOrderJson on SavedOrder {
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'createdAt': createdAt.millisecondsSinceEpoch,
-    'readyAt': readyAt.millisecondsSinceEpoch,
-    'customer': customer,
-    'lines': lines.map((l) => l.toJson()).toList(),
-  };
-  static SavedOrder fromJson(Map<String, dynamic> j) => SavedOrder(
-    id: j['id'],
-    createdAt: DateTime.fromMillisecondsSinceEpoch(j['createdAt']),
-    readyAt: DateTime.fromMillisecondsSinceEpoch(j['readyAt']),
-    customer: j['customer'] ?? '',
-    lines: (j['lines'] as List? ?? []).map((x)=>CartLineJson.fromJson(x as Map<String, dynamic>)).toList(),
-  );
-}
-
-/* =======================
-    AYARLAR SAYFASI
-    ======================= */
-class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
-  @override
-  State<SettingsPage> createState() => _SettingsPageState();
-}
-
-class _SettingsPageState extends State<SettingsPage> {
-  final ipCtrl = TextEditingController();
-  final portCtrl = TextEditingController();
-  final colsCtrl = TextEditingController();
-  final pinCtrl = TextEditingController();
-  String? wifiName;
-  bool testing = false;
-  bool printing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    NetworkInfo().getWifiName().then((name) {
-      if (mounted) setState(() => wifiName = name?.replaceAll('"', ''));
-    });
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final app = AppScope.of(context);
-    ipCtrl.text   = app.settings.printerIp;
-    portCtrl.text = app.settings.printerPort.toString();
-    colsCtrl.text = app.settings.paperCols.toString();
-  }
+  _writeCp1252(socket, '------------------------------\n');
+  _alignRight(socket);
+  _boldOn(socket);
+  _size(socket, 1);
+  _writeCp1252(socket, _rightLine('TOTAL', '€${o.total.toStringAsFixed(2).replaceAll('.', ',')}') + '\n');
+  _size(socket, 0);
+  _boldOff(socket);
 
-  @override
-  Widget build(BuildContext context) {
-    final app = AppScope.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Paramètres')),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          if (wifiName != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text('Connecté au Wi-Fi: $wifiName', style: const TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          TextField(
-            controller: ipCtrl,
-            decoration: const InputDecoration(labelText: 'IP imprimante', border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 8),
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: portCtrl, keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Port', border: OutlineInputBorder()),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: colsCtrl, keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Colonnes (58mm=32, 80mm=48)', border: OutlineInputBorder()),
-              ),
-            ),
-          ]),
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: () async {
-              final ip = ipCtrl.text.trim();
-              final port = int.tryParse(portCtrl.text.trim());
-              final cols = int.tryParse(colsCtrl.text.trim());
-              if (ip.isEmpty || port == null || cols == null) { _snack(context, 'Valeurs invalides.'); return; }
-              await app.setPrinterIp(ip);
-              await app.setPrinterPort(port);
-              await app.setPaperCols(cols);
-              _snack(context, 'Enregistré.');
-            },
-            icon: const Icon(Icons.save),
-            label: const Text('Enregistrer'),
-          ),
-          const Divider(height: 24),
-          Row(children: [
-            Expanded(
-              child: FilledButton.tonalIcon(
-                onPressed: testing ? null : () async {
-                  setState(() => testing = true);
-                  final ok = await app.testPrinterConnectivity();
-                  if (!context.mounted) return;
-                  setState(() => testing = false);
-                  _snack(context, ok ? 'Connexion OK' : 'Connexion échouée');
-                },
-                icon: const Icon(Icons.wifi_tethering),
-                label: Text(testing ? 'Test...' : 'Tester la connexion'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: FilledButton.tonalIcon(
-                onPressed: printing ? null : () async {
-                  setState(() => printing = true);
-                  try {
-                    final demo = SavedOrder(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
-                      createdAt: DateTime.now(),
-                      readyAt: DateTime.now(),
-                      customer: 'TEST',
-                      lines: [
-                        CartLine(product: Product(name:'Test', groups:[]), picked:{}, qty:1),
-                      ],
-                    );
-                    await printOrderAndroid(demo, context);
-                    if (!context.mounted) return;
-                    _snack(context, 'Ticket de test envoyé.');
-                  } catch (e) {
-                    if (context.mounted) {
-                      _snack(context, 'Erreur: $e');
-                    }
-                  } finally {
-                    if (context.mounted) setState(() => printing = false);
-                  }
-                },
-                icon: const Icon(Icons.print),
-                label: Text(printing ? 'Impression...' : 'Test d’impression'),
-              ),
-            ),
-          ]),
-          const Divider(height: 24),
-          TextField(
-            controller: pinCtrl, obscureText: true, keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Nouveau PIN (4–8 chiffres)', border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: () async {
-              final p = pinCtrl.text.trim();
-              if (p.length < 4 || p.length > 8) { _snack(context, 'Longueur du PIN invalide.'); return; }
-              await app.setAdminPin(p);
-              if (!context.mounted) return;
-              _snack(context, 'PIN mis à jour.');
-              pinCtrl.clear();
-            },
-            icon: const Icon(Icons.lock_reset),
-            label: const Text('Changer le PIN'),
-          ),
-        ],
-      ),
-    );
-  }
+  _cmd(socket, [10, 10, 29, 86, 66, 0]);
+
+  await socket.flush();
+  await socket.close();
 }
+
+String _formatEuro(double v) => '€${v.toStringAsFixed(2)}';
