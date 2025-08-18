@@ -1,10 +1,7 @@
 name: Android APK (arm64 debug)
 
 on:
-  # Bu workflow'u manuel olarak çalıştırmanı sağlar
   workflow_dispatch:
-  
-  # "main" branch'ine her kod gönderildiğinde otomatik çalışır
   push:
     branches: [ main ]
 
@@ -12,29 +9,42 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1. Adım: Proje kodunu indirir
+      # 1) Kodu al
       - uses: actions/checkout@v4
 
-      # 2. Adım: Android derlemesi için gerekli Java ortamını kurar
+      # 2) JDK 17 (Java Geliştirme Kiti)
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      # 3. Adım: Flutter SDK'sını kurar
+      # 3) Android SDK (Android Geliştirme Kiti)
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android licenses
+        run: yes | sdkmanager --licenses || true
+
+      # 4) Flutter SDK (Flutter Geliştirme Kiti)
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          # İYİLEŞTİRME: Bağımlılıkları önbelleğe alarak sonraki çalışmaları hızlandırır
+          flutter-version: '3.22.3'   # Senin bilgisayarındaki sürümle aynı
           cache: true
 
-      # 4. Adım: Ana dosyanın içeriğini kontrol eder (opsiyonel)
-      - name: Show main.dart head
-        run: sed -n '1,40p' lib/main.dart
+      # 5) Ortam görünürlüğü (bir sorun olursa diye kontrol için)
+      - name: Flutter doctor
+        run: flutter doctor -v
 
-      # 5. Adım: Eğer reponda yoksa, Android proje dosyalarını oluşturur
+      - name: Show pubspec.yaml
+        run: cat pubspec.yaml
+
+      - name: Show main.dart head
+        run: sed -n '1,60p' lib/main.dart
+
+      # 6) Eğer android klasörü yoksa oluştur
       - name: Create Android folder if missing
         run: |
           if [ ! -d android ]; then
@@ -42,31 +52,31 @@ jobs:
           else
             echo "android/ already exists; skipping flutter create"
           fi
-          
-      # 6. Adım: Yazıcıya bağlanmak için gerekli internet iznini otomatik ekler
+            
+      # 7) INTERNET izni (manifest'e ekle)
       - name: Add INTERNET permission
         run: |
           MANIFEST=android/app/src/main/AndroidManifest.xml
           grep -q 'android.permission.INTERNET' "$MANIFEST" || \
             sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET" />\n    <application#' "$MANIFEST"
             
-      # 7. Adım: Projenin bağımlılıklarını (paketlerini) indirir
+      # 8) Bağımlılıkları indir
       - name: Get dependencies
         run: flutter pub get
-      
-      # 8. Adım (YENİ): Kodu derlemeden önce olası hataları kontrol eder
+
+      # 9) Analiz (DOĞRU KOMUT: FLUTTER ANALYZE)
       - name: Analyze code
         run: flutter analyze
-      
-      # 9. Adım: Önceki derlemelerden kalan artıkları temizler
+
+      # 10) Temizle (isteğe bağlı ama iyi bir alışkanlık)
       - name: Clean project
         run: flutter clean
-      
-      # 10. Adım: APK dosyasını oluşturur
+
+      # 11) APK üret
       - name: Build APK (verbose)
         run: flutter build apk --debug --target-platform=android-arm64 --no-shrink --verbose
 
-      # 11. Adım: Oluşturulan APK dosyasını indirilebilmesi için kaydeder
+      # 12) APK’yı indirilebilmesi için yükle
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
