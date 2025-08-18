@@ -12,29 +12,29 @@ jobs:
       # 1) Kodu al
       - uses: actions/checkout@v4
 
-      # 2) JDK 17 (Java Geliştirme Kiti)
+      # 2) JDK 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      # 3) Android SDK (Android Geliştirme Kiti)
+      # 3) Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Accept Android licenses
         run: yes | sdkmanager --licenses || true
 
-      # 4) Flutter SDK (Flutter Geliştirme Kiti)
+      # 4) Flutter SDK
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.22.3'   # Senin bilgisayarındaki sürümle aynı
+          flutter-version: '3.22.3'   # lokalde hangi stable ise onu yazın
           cache: true
 
-      # 5) Ortam görünürlüğü (bir sorun olursa diye kontrol için)
+      # 5) Ortam bilgisi (teşhis için)
       - name: Flutter doctor
         run: flutter doctor -v
 
@@ -44,7 +44,7 @@ jobs:
       - name: Show main.dart head
         run: sed -n '1,60p' lib/main.dart
 
-      # 6) Eğer android klasörü yoksa oluştur
+      # 6) Android klasörü yoksa oluştur
       - name: Create Android folder if missing
         run: |
           if [ ! -d android ]; then
@@ -52,23 +52,23 @@ jobs:
           else
             echo "android/ already exists; skipping flutter create"
           fi
-            
-      # 7) INTERNET izni (manifest'e ekle)
+
+      # 7) INTERNET izni ekle
       - name: Add INTERNET permission
         run: |
           MANIFEST=android/app/src/main/AndroidManifest.xml
           grep -q 'android.permission.INTERNET' "$MANIFEST" || \
             sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET" />\n    <application#' "$MANIFEST"
-            
-      # 8) Bağımlılıkları indir
+
+      # 8) Paketleri indir
       - name: Get dependencies
         run: flutter pub get
 
-      # 9) Analiz (DOĞRU KOMUT: FLUTTER ANALYZE)
+      # 9) Analiz (Flutter ile)
       - name: Analyze code
         run: flutter analyze
 
-      # 10) Temizle (isteğe bağlı ama iyi bir alışkanlık)
+      # 10) Temizle
       - name: Clean project
         run: flutter clean
 
@@ -76,7 +76,7 @@ jobs:
       - name: Build APK (verbose)
         run: flutter build apk --debug --target-platform=android-arm64 --no-shrink --verbose
 
-      # 12) APK’yı indirilebilmesi için yükle
+      # 12) APK artefact olarak yükle
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
