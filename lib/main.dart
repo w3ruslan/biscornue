@@ -12,14 +12,17 @@ const int    PRINTER_PORT = 9100;        // Genelde 9100 (RAW)
 
 const String _ADMIN_PIN = '6538';
 
+// Kalıcı depolama anahtarları
+const String _kOrdersKey   = 'orders_v1';
+const String _kProductsKey = 'products_v1';
+
 /* =======================
     ENTRY
     ======================= */
-// --- DÜZELTME: AYARLARIN AÇILIŞTA YÜKLENMESİ GARANTİ ALTINA ALINDI ---
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final appState = AppState();
-  await appState.loadSettings(); // await eklendi
+  await appState.loadSettings();
   runApp(AppScope(notifier: appState, child: const App()));
 }
 
@@ -44,6 +47,7 @@ class Product {
   final List<OptionGroup> groups;
   Product({required this.name, List<OptionGroup>? groups})
       : groups = groups ?? [];
+
   double priceForSelection(Map<String, List<OptionItem>> picked) {
     double total = 0;
     for (final g in groups) {
@@ -52,6 +56,17 @@ class Product {
     }
     return total;
   }
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'groups': groups.map((g) => g.toJson()).toList(),
+  };
+  factory Product.fromJson(Map<String, dynamic> j) => Product(
+    name: j['name'] ?? '',
+    groups: (j['groups'] as List<dynamic>? ?? [])
+        .map((e) => OptionGroup.fromJson(e as Map<String, dynamic>))
+        .toList(),
+  );
 }
 
 class OptionGroup {
@@ -69,6 +84,25 @@ class OptionGroup {
     required this.maxSelect,
     List<OptionItem>? items,
   }) : items = items ?? [];
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'multiple': multiple,
+    'minSelect': minSelect,
+    'maxSelect': maxSelect,
+    'items': items.map((i) => i.toJson()).toList(),
+  };
+  factory OptionGroup.fromJson(Map<String, dynamic> j) => OptionGroup(
+    id: j['id'] ?? '',
+    title: j['title'] ?? '',
+    multiple: j['multiple'] ?? false,
+    minSelect: (j['minSelect'] ?? 0) as int,
+    maxSelect: (j['maxSelect'] ?? 1) as int,
+    items: (j['items'] as List<dynamic>? ?? [])
+        .map((e) => OptionItem.fromJson(e as Map<String, dynamic>))
+        .toList(),
+  );
 }
 
 class OptionItem {
@@ -76,6 +110,13 @@ class OptionItem {
   String label;
   double price;
   OptionItem({required this.id, required this.label, required this.price});
+
+  Map<String, dynamic> toJson() => {'id': id, 'label': label, 'price': price};
+  factory OptionItem.fromJson(Map<String, dynamic> j) => OptionItem(
+    id: j['id'] ?? '',
+    label: j['label'] ?? '',
+    price: (j['price'] as num?)?.toDouble() ?? 0.0,
+  );
 }
 
 class CartLine {
@@ -83,6 +124,20 @@ class CartLine {
   final Map<String, List<OptionItem>> picked; // deep copy saklı
   CartLine({required this.product, required this.picked});
   double get total => product.priceForSelection(picked);
+
+  Map<String, dynamic> toJson() => {
+    'product': product.toJson(),
+    'picked': picked.map((k, v) => MapEntry(k, v.map((e) => e.toJson()).toList())),
+  };
+  factory CartLine.fromJson(Map<String, dynamic> j) {
+    final prod = Product.fromJson(j['product'] as Map<String, dynamic>);
+    final Map<String, List<OptionItem>> pk = {};
+    final raw = (j['picked'] as Map<String, dynamic>? ?? {});
+    raw.forEach((key, val) {
+      pk[key] = (val as List<dynamic>).map((e) => OptionItem.fromJson(e as Map<String, dynamic>)).toList();
+    });
+    return CartLine(product: prod, picked: pk);
+  }
 }
 
 class SavedOrder {
@@ -100,6 +155,23 @@ class SavedOrder {
     required this.customer,
   });
   double get total => lines.fold(0.0, (s, l) => s + l.total);
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'createdAt': createdAt.toIso8601String(),
+    'readyAt': readyAt.toIso8601String(),
+    'customer': customer,
+    'lines': lines.map((l) => l.toJson()).toList(),
+  };
+  factory SavedOrder.fromJson(Map<String, dynamic> j) => SavedOrder(
+    id: j['id'] ?? '',
+    createdAt: DateTime.tryParse(j['createdAt'] ?? '') ?? DateTime.now(),
+    readyAt: DateTime.tryParse(j['readyAt'] ?? '') ?? DateTime.now(),
+    customer: j['customer'] ?? '',
+    lines: (j['lines'] as List<dynamic>? ?? [])
+        .map((e) => CartLine.fromJson(e as Map<String, dynamic>))
+        .toList(),
+  );
 }
 
 class AppState extends ChangeNotifier {
@@ -108,12 +180,53 @@ class AppState extends ChangeNotifier {
   final List<SavedOrder> orders = [];
   int prepMinutes = 5;
 
+  /* ---------- Kalıcı yükleme ---------- */
   Future<void> loadSettings() async {
     final sp = await SharedPreferences.getInstance();
     prepMinutes = sp.getInt('prepMinutes') ?? 5;
+
+    // Orders
+    final ordersJson = sp.getString(_kOrdersKey);
+    if (ordersJson != null && ordersJson.isNotEmpty) {
+      try {
+        final list = (jsonDecode(ordersJson) as List<dynamic>)
+            .map((e) => SavedOrder.fromJson(e as Map<String, dynamic>))
+            .toList();
+        orders
+          ..clear()
+          ..addAll(list);
+      } catch (_) {/* ignore */}
+    }
+
+    // Products (isteğe bağlı kalıcı) — varsa tohum yüklemesi yapılmaz
+    final productsJson = sp.getString(_kProductsKey);
+    if (productsJson != null && productsJson.isNotEmpty) {
+      try {
+        final list = (jsonDecode(productsJson) as List<dynamic>)
+            .map((e) => Product.fromJson(e as Map<String, dynamic>))
+            .toList();
+        products
+          ..clear()
+          ..addAll(list);
+      } catch (_) {/* ignore */}
+    }
+
     notifyListeners();
   }
 
+  Future<void> _saveOrders() async {
+    final sp = await SharedPreferences.getInstance();
+    final data = jsonEncode(orders.map((e) => e.toJson()).toList());
+    await sp.setString(_kOrdersKey, data);
+  }
+
+  Future<void> _saveProducts() async {
+    final sp = await SharedPreferences.getInstance();
+    final data = jsonEncode(products.map((e) => e.toJson()).toList());
+    await sp.setString(_kProductsKey, data);
+  }
+
+  /* ---------- Mutasyonlar ---------- */
   Future<void> setPrepMinutes(int m) async {
     prepMinutes = m;
     final sp = await SharedPreferences.getInstance();
@@ -121,22 +234,33 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addProduct(Product p) { products.add(p); notifyListeners(); }
-  void replaceProductAt(int i, Product p) { products[i] = p; notifyListeners(); }
+  void addProduct(Product p) {
+    products.add(p);
+    _saveProducts();
+    notifyListeners();
+  }
+
+  void replaceProductAt(int i, Product p) {
+    products[i] = p;
+    _saveProducts();
+    notifyListeners();
+  }
 
   void addLineToCart(Product p, Map<String, List<OptionItem>> picked) {
-    final deep = { for (final e in picked.entries) e.key: List<OptionItem>.from(e.value) };
+    final deep = {for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)};
     cart.add(CartLine(product: p, picked: deep));
     notifyListeners();
   }
-  void removeCartLineAt(int i) { if (i>=0 && i<cart.length) { cart.removeAt(i); notifyListeners(); } }
+
+  void removeCartLineAt(int i) { 
+    if (i>=0 && i<cart.length) { cart.removeAt(i); notifyListeners(); } 
+  }
+
   void clearCart() { cart.clear(); notifyListeners(); }
 
   void updateCartLineAt(int i, Map<String, List<OptionItem>> picked) {
     if (i < 0 || i >= cart.length) return;
-    final deep = {
-      for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
-    };
+    final deep = {for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)};
     final p = cart[i].product;
     cart[i] = CartLine(product: p, picked: deep);
     notifyListeners();
@@ -146,7 +270,7 @@ class AppState extends ChangeNotifier {
     if (cart.isEmpty) return;
     final deepLines = cart.map((l) => CartLine(
       product: l.product,
-      picked: { for (final e in l.picked.entries) e.key: List<OptionItem>.from(e.value) },
+      picked: {for (final e in l.picked.entries) e.key: List<OptionItem>.from(e.value)},
     )).toList();
 
     final now   = DateTime.now();
@@ -160,9 +284,15 @@ class AppState extends ChangeNotifier {
       customer: customer,
     ));
     cart.clear();
+    _saveOrders();
     notifyListeners();
   }
-  void clearOrders() { orders.clear(); notifyListeners(); }
+
+  void clearOrders() { 
+    orders.clear(); 
+    _saveOrders();
+    notifyListeners(); 
+  }
 }
 
 /* InheritedNotifier: global state erişimi */
@@ -196,6 +326,7 @@ class _HomeState extends State<Home> {
     _seeded = true;
 
     final app = AppScope.of(context);
+    // Yalnızca ürün yoksa tohumla (kalıcıdan yüklenmediyse)
     if (app.products.isEmpty) {
       final products = <Product>[
         Product(name: 'Sandwich', groups: [
@@ -429,6 +560,8 @@ class _HomeState extends State<Home> {
       ];
 
       app.products.addAll(products);
+      // Tohum ürünleri diske de yaz (uygulamayı kapatınca kalsın)
+      app._saveProducts();
     }
   }
 
@@ -970,7 +1103,7 @@ class _OptionEditorState extends State<_OptionEditor> {
 }
 
 /* =======================
-    WIZARD (BUTONLAR İÇERİKTE, BİRAZ DAHA YUKARIDA)
+    WIZARD
     ======================= */
 class OrderWizard extends StatefulWidget {
   final Product product;
@@ -1678,7 +1811,7 @@ void _showWarn(BuildContext context, String msg) {
 }
 
 /* =======================
-    Choisir butonu (kırılma yok)
+    Choisir butonu
     ======================= */
 Widget choisirButton(VoidCallback onTap, BuildContext context) {
   final color = Theme.of(context).colorScheme;
@@ -1697,13 +1830,11 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 }
 
 // ==================================================
-// YENİ, PAKETSİZ YAZDIRMA YARDIMCILARI
+// PAKETSİZ YAZDIRMA
 // ==================================================
 
 String _two(int n) => n.toString().padLeft(2, '0');
-
-String _money(double v) =>
-    '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
+String _money(double v) => '${v.toStringAsFixed(2).replaceAll(".", ",")} €';
 
 String _rightLine(String left, String right, {int width = 32}) {
   left = left.replaceAll('\n', ' ');
@@ -1725,14 +1856,8 @@ void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
 void _writeCp1252(Socket socket, String text) {
   final out = <int>[];
   for (final r in text.runes) {
-    if (r == 0x20AC) { // €
-      out.add(0x80);
-      continue;
-    }
-    if (r <= 0x7F) { // ASCII
-      out.add(r);
-      continue;
-    }
+    if (r == 0x20AC) { out.add(0x80); continue; } // €
+    if (r <= 0x7F) { out.add(r); continue; }       // ASCII
     final ch = String.fromCharCode(r);
     const repl = {
       'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
@@ -1751,8 +1876,8 @@ void _writeCp1252(Socket socket, String text) {
 Future<void> printOrderAndroid(SavedOrder o) async {
   final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  _cmd(socket, [27, 64]);
-  _cmd(socket, [27, 116, 16]);
+  _cmd(socket, [27, 64]);       // init
+  _cmd(socket, [27, 116, 16]);  // codepage
 
   _alignCenter(socket);
   _size(socket, 17);
@@ -1803,7 +1928,7 @@ Future<void> printOrderAndroid(SavedOrder o) async {
   _size(socket, 0);
   _boldOff(socket);
 
-  _cmd(socket, [10, 10, 29, 86, 66, 0]);
+  _cmd(socket, [10, 10, 29, 86, 66, 0]); // feed + partial cut
 
   await socket.flush();
   await socket.close();
