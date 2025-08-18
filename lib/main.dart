@@ -1386,6 +1386,7 @@ class CartPage extends StatelessWidget {
             onPressed: () async {
               final name = await _askCustomerName(context);
               if (name == null) return;
+              if (!context.mounted) return;
               final app = AppScope.of(context);
               final ready = DateTime.now().add(Duration(minutes: app.prepMinutes));
               app.finalizeCartToOrder(customer: name);
