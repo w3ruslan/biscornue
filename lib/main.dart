@@ -1,7 +1,8 @@
+import 'package.flutter/material.dart'; // HATA GİDERİLDİ: Eksik olan temel Flutter paketi eklendi.
 import 'dart:io';
 import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package.flutter/services.dart';
+import 'package.flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 
@@ -1446,10 +1447,9 @@ class OrdersPage extends StatelessWidget {
                     ],
                   ),
                 );
-                if (choice == 1) { // Rapor yazdır
+                if (choice == 1) { 
                   try {
                     await printDailyReport(context);
-                    // YAMA 1.D: context.mounted kontrolü eklendi
                     if (!context.mounted) return;
                     _snack(context, 'Rapport envoyé à l\'imprimante.');
                   } catch (e) {
@@ -1457,7 +1457,7 @@ class OrdersPage extends StatelessWidget {
                       _snack(context, 'Erreur d\'impression: $e');
                     }
                   }
-                } else if (choice == 2) { // Her şeyi sil
+                } else if (choice == 2) { 
                   app.clearOrders();
                 }
               },
@@ -1484,7 +1484,6 @@ class OrdersPage extends StatelessWidget {
                   onPressed: () async {
                     try {
                       await printOrderAndroid(o, context);
-                      // YAMA 1.C: context.mounted kontrolü eklendi
                       if (!context.mounted) return;
                       _snack(context, 'Ticket envoyé à l\'imprimante.');
                     } catch (e) {
@@ -2011,7 +2010,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 onPressed: testing ? null : () async {
                   setState(() => testing = true);
                   final ok = await app.testPrinterConnectivity();
-                  // YAMA 1.A: context.mounted kontrolü eklendi
                   if (!context.mounted) return;
                   setState(() => testing = false);
                   _snack(context, ok ? 'Connexion OK' : 'Connexion échouée');
@@ -2036,7 +2034,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       ],
                     );
                     await printOrderAndroid(demo, context);
-                    // YAMA 1.B: context.mounted kontrolü eklendi
                     if (!context.mounted) return;
                     _snack(context, 'Ticket de test envoyé.');
                   } catch (e) {
