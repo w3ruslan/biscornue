@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:network_info_plus/network_info_plus.dart';
 
 /* =======================
     Sabitler
@@ -16,9 +15,11 @@ const String _ADMIN_PIN = '6538';
 /* =======================
     ENTRY
     ======================= */
-void main() {
+// --- DÜZELTME: AYARLARIN AÇILIŞTA YÜKLENMESİ GARANTİ ALTINA ALINDI ---
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   final appState = AppState();
-  appState.loadSettings(); // Ayarları yükle
+  await appState.loadSettings(); // await eklendi
   runApp(AppScope(notifier: appState, child: const App()));
 }
 
@@ -636,6 +637,13 @@ class _CreateProductPageState extends State<CreateProductPage> {
     });
   }
 
+  @override
+  void dispose() {
+    nameCtrl.dispose();
+    delayCtrl.dispose();
+    super.dispose();
+  }
+
   void _loadForEdit(int idx) {
     final app = AppScope.of(context);
     if (idx < 0 || idx >= app.products.length) return;
@@ -810,6 +818,14 @@ class _GroupEditorState extends State<_GroupEditor> {
     maxCtrl.text = widget.group.maxSelect.toString();
   }
 
+  @override
+  void dispose() {
+    titleCtrl.dispose();
+    minCtrl.dispose();
+    maxCtrl.dispose();
+    super.dispose();
+  }
+
   void apply() {
     widget.group.title = titleCtrl.text.trim();
     widget.group.multiple = _mode == 1;
@@ -819,7 +835,12 @@ class _GroupEditorState extends State<_GroupEditor> {
   }
 
   int get _mode => widget.group.multiple ? 1 : 0;
-  set _mode(int v) { if (v == 0) { minCtrl.text = '1'; maxCtrl.text = '1'; } apply(); setState(() {}); }
+  set _mode(int v) {
+    widget.group.multiple = (v == 1);
+    if (v == 0) { minCtrl.text = '1'; maxCtrl.text = '1'; }
+    apply();
+    setState(() {});
+  }
 
   void addOption() {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
@@ -861,4 +882,931 @@ class _GroupEditorState extends State<_GroupEditor> {
               child: TextField(
                 controller: minCtrl, keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'Sélection min', border: OutlineInputBorder()),
-                on
+                onChanged: (_) => apply(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: maxCtrl, keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Sélection max', border: OutlineInputBorder()),
+                onChanged: (_) => apply(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.icon(onPressed: addOption, icon: const Icon(Icons.add), label: const Text('Ajouter une option')),
+          ]),
+          const SizedBox(height: 8),
+          for (int i = 0; i < g.items.length; i++)
+            _OptionEditor(
+              key: ValueKey(g.items[i].id),
+              item: g.items[i],
+              onDelete: () { g.items.removeAt(i); widget.onChanged(); setState(() {}); },
+              onChanged: () { widget.onChanged(); setState(() {}); },
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _OptionEditor extends StatefulWidget {
+  final OptionItem item;
+  final VoidCallback onDelete;
+  final VoidCallback onChanged;
+  const _OptionEditor({super.key, required this.item, required this.onDelete, required this.onChanged});
+  @override
+  State<_OptionEditor> createState() => _OptionEditorState();
+}
+
+class _OptionEditorState extends State<_OptionEditor> {
+  final TextEditingController labelCtrl = TextEditingController();
+  final TextEditingController priceCtrl = TextEditingController();
+  @override
+  void initState() {
+    super.initState();
+    labelCtrl.text = widget.item.label;
+    priceCtrl.text = widget.item.price.toStringAsFixed(2);
+  }
+
+  @override
+  void dispose() {
+    labelCtrl.dispose();
+    priceCtrl.dispose();
+    super.dispose();
+  }
+
+  void apply() {
+    widget.item.label = labelCtrl.text.trim();
+    widget.item.price = double.tryParse(priceCtrl.text.replaceAll(',', '.')) ?? 0.0;
+    widget.onChanged();
+  }
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 0),
+      title: Row(children: [
+        Expanded(
+          child: TextField(
+            controller: labelCtrl,
+            decoration: const InputDecoration(labelText: 'Nom de l’option', border: OutlineInputBorder()),
+            onChanged: (_) => apply(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 120,
+          child: TextField(
+            controller: priceCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Prix (€)', border: OutlineInputBorder()),
+            onChanged: (_) => apply(),
+          ),
+        ),
+        IconButton(onPressed: widget.onDelete, icon: const Icon(Icons.delete_outline)),
+      ]),
+    );
+  }
+}
+
+/* =======================
+    WIZARD (BUTONLAR İÇERİKTE, BİRAZ DAHA YUKARIDA)
+    ======================= */
+class OrderWizard extends StatefulWidget {
+  final Product product;
+  final Map<String, List<OptionItem>>? initialPicked;
+  final bool editMode;
+
+  const OrderWizard({
+    super.key,
+    required this.product,
+    this.initialPicked,
+    this.editMode = false,
+  });
+
+  @override
+  State<OrderWizard> createState() => _OrderWizardState();
+}
+
+class _OrderWizardState extends State<OrderWizard> {
+  int step = 0;
+  final Map<String, List<OptionItem>> picked = {};
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialPicked != null) {
+      for (final e in widget.initialPicked!.entries) {
+        picked[e.key] = List<OptionItem>.from(e.value);
+      }
+    }
+  }
+
+  List<OptionGroup> _groupsForVisibility(List<OptionGroup> base) {
+    if (widget.product.name != 'Menu Enfant') return base;
+
+    final cheeseSecildiMi =
+        (picked['choix_enfant'] ?? const <OptionItem>[]).any((it) => it.id == 'cheese_menu');
+
+    return base.where((g) {
+      if (g.id == 'crudites_enfant') return cheeseSecildiMi;
+      return true;
+    }).toList();
+  }
+
+  void _toggleSingle(OptionGroup g, OptionItem it) { picked[g.id] = [it]; setState(() {}); }
+  void _toggleMulti(OptionGroup g, OptionItem it) {
+    final list = List<OptionItem>.from(picked[g.id] ?? []);
+    final isCrud = g.id == 'crudites';
+    final isSansCrud = it.id == 'sans_crudites';
+
+    if (isCrud && isSansCrud) {
+      picked[g.id] = [it];
+      setState(() {});
+      return;
+    }
+
+    final exists = list.any((e) => e.id == it.id);
+    if (exists) {
+      list.removeWhere((e) => e.id == it.id);
+    } else {
+      if (isCrud) {
+        list.removeWhere((e) => e.id == 'sans_crudites');
+      }
+      if (list.length >= g.maxSelect) return;
+      list.add(it);
+    }
+
+    picked[g.id] = list;
+    setState(() {});
+  }
+  
+  bool _validGroup(OptionGroup g) {
+    final n = (picked[g.id] ?? const []).length;
+    return n >= g.minSelect && n <= g.maxSelect;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = _groupsForVisibility(widget.product.groups);
+    final isSummary = step >= groups.length;
+    final total = widget.product.priceForSelection(picked);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(isSummary ? 'Récapitulatif' : widget.product.name),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            if (isSummary) {
+              setState(() => step = groups.isEmpty ? 0 : groups.length - 1);
+            } else if (step > 0) {
+              setState(() => step--);
+            } else {
+              Navigator.pop(context);
+            }
+          },
+        ),
+      ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: isSummary
+                ? _Summary(product: widget.product, picked: picked, total: total)
+                : _GroupStep(
+                    group: groups[step],
+                    picked: picked,
+                    toggleSingle: _toggleSingle,
+                    toggleMulti: _toggleMulti,
+                  ),
+          ),
+          Positioned(
+            left: 16,
+            bottom: 16 + MediaQuery.of(context).padding.bottom,
+            child: FloatingActionButton.large(
+              heroTag: 'prevFab',
+              onPressed: step == 0
+                  ? null
+                  : () => setState(() => step--),
+              child: const Icon(Icons.arrow_back),
+            ),
+          ),
+          Positioned(
+            right: 16,
+            bottom: 16 + MediaQuery.of(context).padding.bottom,
+            child: FloatingActionButton.large(
+              heroTag: 'nextFab',
+              onPressed: () {
+                if (isSummary) {
+                  if (widget.editMode) {
+                    final result = {
+                      for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
+                    };
+                    Navigator.pop(context, result);
+                  } else {
+                    final app = AppScope.of(context);
+                    app.addLineToCart(widget.product, picked);
+                    if (!mounted) return;
+                    Navigator.pop(context, true);
+                  }
+                  return;
+                }
+                final g = groups[step];
+                if (!_validGroup(g)) {
+                  _showWarn(context, 'Sélection invalide pour "${g.title}".');
+                  return;
+                }
+                setState(() => step++);
+              },
+              child: Icon(isSummary ? (widget.editMode ? Icons.check : Icons.add_shopping_cart) : Icons.arrow_forward),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupStep extends StatelessWidget {
+  final OptionGroup group;
+  final Map<String, List<OptionItem>> picked;
+  final void Function(OptionGroup, OptionItem) toggleSingle;
+  final void Function(OptionGroup, OptionItem) toggleMulti;
+
+  const _GroupStep({
+    required this.group,
+    required this.picked,
+    required this.toggleSingle,
+    required this.toggleMulti,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme;
+    final size = MediaQuery.of(context).size;
+
+    final desired = 160.0;
+    int cross = (size.width / desired).floor().clamp(2, 5);
+
+    final selectedList = picked[group.id] ?? const <OptionItem>[];
+    final sansCrudOn = group.id == 'crudites'
+        && selectedList.any((e) => e.id == 'sans_crudites');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          child: Text(
+            group.title +
+                (group.multiple
+                    ? '  (min ${group.minSelect}, max ${group.maxSelect})'
+                    : ''),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: cross,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1, // KARE
+            ),
+            itemCount: group.items.length,
+            itemBuilder: (_, i) {
+              final it = group.items[i];
+              final isSelected = selectedList.any((e) => e.id == it.id);
+              final disabled = sansCrudOn && it.id != 'sans_crudites';
+
+              void onTap() {
+                if (group.multiple) {
+                  toggleMulti(group, it);
+                } else {
+                  toggleSingle(group, it);
+                }
+              }
+
+              return InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: disabled ? null : onTap,
+                child: Opacity(
+                  opacity: disabled ? 0.35 : 1.0,
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? color.primaryContainer
+                          : color.surfaceVariant,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected ? color.primary : color.outlineVariant,
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: group.multiple
+                              ? Icon(
+                                  isSelected
+                                      ? Icons.check_box
+                                      : Icons.check_box_outline_blank,
+                                  size: 22,
+                                  color: isSelected
+                                      ? color.primary
+                                      : color.onSurfaceVariant,
+                                )
+                              : Icon(
+                                  isSelected
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_unchecked,
+                                  size: 22,
+                                  color: isSelected
+                                      ? color.primary
+                                      : color.onSurfaceVariant,
+                                ),
+                        ),
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 8),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  it.label,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                if (it.price != 0)
+                                  Text(
+                                    '+ ${_formatEuro(it.price)}',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: color.onSurfaceVariant,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Summary extends StatelessWidget {
+  final Product product;
+  final Map<String, List<OptionItem>> picked;
+  final double total;
+  const _Summary({required this.product, required this.picked, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        Text('Récapitulatif — ${product.name}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 12),
+        for (final g in product.groups)
+          if ((picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
+            Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            for (final it in (picked[g.id] ?? const <OptionItem>[]))
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Text('• ${it.label}'),
+                Text(it.price == 0 ? '€0.00' : '€${it.price.toStringAsFixed(2)}'),
+              ]),
+            const SizedBox(height: 8),
+            const Divider(),
+          ],
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          const Text('SOUS-TOTAL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text('€${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+}
+
+/* =======================
+    PAGE 3 : PANIER
+    ======================= */
+class CartPage extends StatelessWidget {
+  const CartPage({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final lines = app.cart;
+    final total = lines.fold(0.0, (s, l) => s + l.total);
+
+    if (lines.isEmpty) {
+      return Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: const [
+          Icon(Icons.shopping_bag_outlined, size: 48),
+          SizedBox(height: 8),
+          Text('Panier vide. Ajoutez des produits.'),
+        ]),
+      );
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: Row(children: [
+            const Text('Panier', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: () => app.clearCart(),
+              icon: const Icon(Icons.delete_sweep),
+              label: const Text('Vider'),
+            ),
+          ]),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.all(12),
+            itemCount: lines.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (_, i) {
+              final l = lines[i];
+              return ListTile(
+                leading: const Icon(Icons.fastfood),
+                title: Text('${l.product.name} • €${l.total.toStringAsFixed(2)}'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final g in l.product.groups)
+                      if ((l.picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
+                        Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        for (final it in (l.picked[g.id] ?? const <OptionItem>[]))
+                          Text('• ${it.label}${it.price == 0 ? '' : ' (+€${it.price.toStringAsFixed(2)})'}'),
+                      ],
+                  ],
+                ),
+                trailing: Wrap(
+                  spacing: 4,
+                  children: [
+                    IconButton(
+                      tooltip: 'Düzenle',
+                      icon: const Icon(Icons.edit_outlined),
+                      onPressed: () async {
+                        final result = await Navigator.push<Map<String, List<OptionItem>>>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => OrderWizard(
+                              product: l.product,
+                              initialPicked: l.picked,
+                              editMode: true,
+                            ),
+                          ),
+                        );
+                        if (result != null) {
+                          app.updateCartLineAt(i, result);
+                          if (context.mounted) {
+                            _snack(context, 'Satır güncellendi.');
+                          }
+                        }
+                      },
+                    ),
+                    IconButton(
+                      tooltip: 'Sil',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => app.removeCartLineAt(i),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            const Text('TOTAL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('€${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: FilledButton.icon(
+            onPressed: () async {
+              final name = await _askCustomerName(context);
+              if (name == null) return;
+              final app = AppScope.of(context);
+              final ready = DateTime.now().add(Duration(minutes: app.prepMinutes));
+              app.finalizeCartToOrder(customer: name);
+              if (context.mounted) {
+                _snack(context,
+                  'Commande validée pour "$name". Prêt à ${_two(ready.hour)}:${_two(ready.minute)}.');
+              }
+            },
+            icon: const Icon(Icons.check),
+            label: const Text('Valider la commande'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/* =======================
+    PAGE 4 : COMMANDES + YAZDIRMA
+    ======================= */
+class OrdersPage extends StatelessWidget {
+  const OrdersPage({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final orders = app.orders.reversed.toList();
+
+    if (orders.isEmpty) {
+      return Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: const [
+          Icon(Icons.receipt_long, size: 48),
+          SizedBox(height: 8),
+          Text('Aucune commande.'),
+        ]),
+      );
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: Row(children: [
+            const Text('Commandes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Spacer(),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: () async {
+                final pinOk = await _askPin(context); if (!pinOk) return;
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Fin de journée ?'),
+                    content: const Text('Toutes les commandes seront supprimées. Action irréversible.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
+                      FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Supprimer')),
+                    ],
+                  ),
+                );
+                if (ok == true) app.clearOrders();
+              },
+              icon: const Icon(Icons.delete_forever),
+              label: const Text('Journée terminée'),
+            ),
+          ]),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.all(12),
+            itemCount: orders.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (_, i) {
+              final o = orders[i];
+              final who = o.customer.isEmpty ? '' : ' — ${o.customer}';
+              return ListTile(
+                leading: const Icon(Icons.receipt),
+                title: Text('Commande$who • ${o.lines.length} article(s) • €${o.total.toStringAsFixed(2)}'),
+                subtitle: Text('Prêt à ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.print_outlined),
+                  onPressed: () async {
+                    try {
+                      await printOrderAndroid(o);
+                      _snack(context, 'Fiş yazıcıya gönderildi.');
+                    } catch (e) {
+                      _snack(context, 'Yazdırma hatası: $e');
+                    }
+                  },
+                  tooltip: 'Imprimer',
+                ),
+                onTap: () {
+                  showDialog(context: context, builder: (_) {
+                    return AlertDialog(
+                      title: const Text('Détails de la commande'),
+                      content: SizedBox(
+                        width: 360,
+                        child: ListView(
+                          shrinkWrap: true,
+                          children: [
+                            if (o.customer.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text('Client: ${o.customer}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text('Prêt à: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                            for (int idx = 0; idx < o.lines.length; idx++) ...[
+                              Text('Article ${idx+1}: ${o.lines[idx].product.name}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold)),
+                              for (final g in o.lines[idx].product.groups)
+                                if ((o.lines[idx].picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
+                                  Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  for (final it in (o.lines[idx].picked[g.id] ?? const <OptionItem>[]))
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text('• ${it.label}'),
+                                        Text(it.price == 0 ? '€0.00' : '€${it.price.toStringAsFixed(2)}'),
+                                      ],
+                                    ),
+                                ],
+                              const Divider(),
+                            ],
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold)),
+                                Text('€${o.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () async {
+                            try {
+                              await printOrderAndroid(o);
+                              if (context.mounted) {
+                                Navigator.pop(context); // Diyalogu kapat
+                                _snack(context, 'Fiş yazıcıya gönderildi.');
+                              }
+                            } catch (e) {
+                               _snack(context, 'Yazdırma hatası: $e');
+                            }
+                          },
+                          child: const Text('Imprimer'),
+                        ),
+                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fermer')),
+                      ],
+                    );
+                  });
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/* =======================
+    DİYALOGLAR & UTIL
+    ======================= */
+Future<bool> _askPin(BuildContext context) async {
+  final ctrl = TextEditingController();
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Code PIN requis'),
+      content: TextField(
+        controller: ctrl, keyboardType: TextInputType.number, obscureText: true, maxLength: 8,
+        decoration: const InputDecoration(labelText: 'Entrez le code', border: OutlineInputBorder()),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim() == _ADMIN_PIN), child: const Text('Valider')),
+      ],
+    ),
+  );
+  if (ok != true) {
+    _snack(context, 'Code incorrect.');
+  }
+  return ok == true;
+}
+
+Future<String?> _askCustomerName(BuildContext context) async {
+  final ctrl = TextEditingController();
+  String? error;
+  return showDialog<String>(
+    context: context,
+    builder: (ctx) {
+      return StatefulBuilder(builder: (ctx, setState) {
+        return AlertDialog(
+          title: const Text('Nom du client'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: ctrl, autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Écrire le nom',
+                  border: const OutlineInputBorder(),
+                  errorText: error,
+                ),
+                onSubmitted: (_) {
+                  if (ctrl.text.trim().isEmpty) {
+                    setState(() => error = 'Le nom est requis.');
+                  } else {
+                    Navigator.pop(ctx, ctrl.text.trim());
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Annuler')),
+            FilledButton(
+              onPressed: () {
+                final name = ctrl.text.trim();
+                if (name.isEmpty) { setState(() => error = 'Le nom est requis.'); return; }
+                Navigator.pop(ctx, name);
+              },
+              child: const Text('Valider'),
+            ),
+          ],
+        );
+      });
+    },
+  );
+}
+
+void _snack(BuildContext context, String msg, {int ms = 1200}) {
+  if (!context.mounted) return;
+  final bottomInset = MediaQuery.of(context).padding.bottom;
+  final bottomBar = kBottomNavigationBarHeight;
+  final bottomMargin = 12 + bottomInset + bottomBar;
+
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        duration: Duration(milliseconds: ms),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.fromLTRB(12, 0, 12, bottomMargin),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        dismissDirection: DismissDirection.horizontal,
+      ),
+    );
+}
+
+void _showWarn(BuildContext context, String msg) {
+  _snack(context, msg);
+}
+
+/* =======================
+    Choisir butonu (kırılma yok)
+    ======================= */
+Widget choisirButton(VoidCallback onTap, BuildContext context) {
+  final color = Theme.of(context).colorScheme;
+  return Material(
+    color: color.primary,
+    shape: const CircleBorder(),
+    child: InkWell(
+      customBorder: const CircleBorder(),
+      onTap: onTap,
+      child: const SizedBox(
+        height: 48, width: 48,
+        child: Icon(Icons.shopping_cart_outlined, color: Colors.white),
+      ),
+    ),
+  );
+}
+
+// ==================================================
+// YENİ, PAKETSİZ YAZDIRMA YARDIMCILARI
+// ==================================================
+
+String _two(int n) => n.toString().padLeft(2, '0');
+
+String _money(double v) =>
+    '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
+
+String _rightLine(String left, String right, {int width = 32}) {
+  left = left.replaceAll('\n', ' ');
+  right = right.replaceAll('\n', ' ');
+  if (left.length + right.length > width) {
+    left = left.substring(0, width - right.length);
+  }
+  return left + ' ' * (width - left.length - right.length) + right;
+}
+
+void _cmd(Socket s, List<int> bytes) => s.add(bytes);
+void _boldOn(Socket s)  => _cmd(s, [27, 69, 1]);
+void _boldOff(Socket s) => _cmd(s, [27, 69, 0]);
+void _size(Socket s, int n) => _cmd(s, [29, 33, n]);
+void _alignLeft(Socket s)   => _cmd(s, [27, 97, 0]);
+void _alignCenter(Socket s) => _cmd(s, [27, 97, 1]);
+void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
+
+void _writeCp1252(Socket socket, String text) {
+  final out = <int>[];
+  for (final r in text.runes) {
+    if (r == 0x20AC) { // €
+      out.add(0x80);
+      continue;
+    }
+    if (r <= 0x7F) { // ASCII
+      out.add(r);
+      continue;
+    }
+    final ch = String.fromCharCode(r);
+    const repl = {
+      'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
+      'ş':'s','Ş':'S','ü':'u','Ü':'U','é':'e','è':'e','ê':'e','á':'a','à':'a','â':'a',
+      'ô':'o','ù':'u','–':'-','—':'-','…':'...',
+      'Œ':'Oe','œ':'oe',
+    };
+    final s = repl[ch] ?? '?';
+    for (final cu in s.codeUnits) {
+      if (cu == 0x20AC) { out.add(0x80); } else { out.add(cu <= 0x7F ? cu : 0x3F); }
+    }
+  }
+  socket.add(out);
+}
+
+Future<void> printOrderAndroid(SavedOrder o) async {
+  final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
+
+  _cmd(socket, [27, 64]);
+  _cmd(socket, [27, 116, 16]);
+
+  _alignCenter(socket);
+  _size(socket, 17);
+  _boldOn(socket);
+  _writeCp1252(socket, '*** BISCORNUE ***\n');
+  _boldOff(socket);
+  _size(socket, 0);
+
+  if (o.customer.isNotEmpty) {
+    _size(socket, 1);
+    _boldOn(socket);
+    _writeCp1252(socket, 'Client: ${o.customer}\n');
+    _boldOff(socket);
+    _size(socket, 0);
+  }
+
+  _boldOn(socket);
+  _size(socket, 1);
+  _writeCp1252(socket, 'Pret a: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}\n');
+  _size(socket, 0);
+  _boldOff(socket);
+
+  _alignLeft(socket);
+  _writeCp1252(socket, '------------------------------\n');
+
+  for (int i = 0; i < o.lines.length; i++) {
+    final l = o.lines[i];
+    _writeCp1252(socket, _rightLine('Item ${i + 1}: ${l.product.name}', _money(l.total)) + '\n');
+    for (final g in l.product.groups) {
+      final sel = l.picked[g.id] ?? const <OptionItem>[];
+      if (sel.isNotEmpty) {
+        _writeCp1252(socket, '  ${g.title}:\n');
+        for (final it in sel) {
+          _writeCp1252(socket, '    * ${it.label}\n');
+        }
+      }
+    }
+    if (i != o.lines.length - 1) {
+      _writeCp1252(socket, '--------------------------------\n');
+    }
+  }
+
+  _writeCp1252(socket, '------------------------------\n');
+  _alignRight(socket);
+  _boldOn(socket);
+  _size(socket, 1);
+  _writeCp1252(socket, _rightLine('TOTAL', '€${o.total.toStringAsFixed(2).replaceAll('.', ',')}') + '\n');
+  _size(socket, 0);
+  _boldOff(socket);
+
+  _cmd(socket, [10, 10, 29, 86, 66, 0]);
+
+  await socket.flush();
+  await socket.close();
+}
+
+String _formatEuro(double v) => '€${v.toStringAsFixed(2)}';
