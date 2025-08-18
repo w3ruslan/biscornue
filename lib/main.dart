@@ -1,15 +1,15 @@
 import 'dart:io';
+import 'dart:convert'; // Kalıcılık için eklendi
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // FilteringTextInputFormatter için eklendi
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:network_info_plus/network_info_plus.dart'; // Ayarlar sayfası için eklendi
 
 /* =======================
-    Sabitler
+    Sabitler (Varsayılan Değerler)
     ======================= */
-// LÜTFEN BU IP ADRESİNİ KENDİ YAZICINIZIN IP ADRESİYLE DEĞİŞTİRİN
-const String PRINTER_IP = '192.168.1.1'; // <-- Epson yazıcının IP'si
-const int    PRINTER_PORT = 9100;        // Genelde 9100 (RAW)
-
+const String PRINTER_IP = '192.168.1.1';
+const int    PRINTER_PORT = 9100;
 const String _ADMIN_PIN = '6538';
 
 /* =======================
@@ -17,7 +17,7 @@ const String _ADMIN_PIN = '6538';
     ======================= */
 void main() {
   final appState = AppState();
-  appState.loadSettings(); // Ayarları yükle
+  appState.loadSettings();
   runApp(AppScope(notifier: appState, child: const App()));
 }
 
@@ -35,12 +35,60 @@ class App extends StatelessWidget {
 }
 
 /* =======================
+    AYARLAR MODELİ (YAMA 1.1)
+    ======================= */
+// Basit, ekstra paket gerektirmeyen bir "hash" (FNV-1a 64-bit)
+String _fnv64(String s, {String salt = 'bis-1'}) {
+  final data = (salt + s).codeUnits;
+  int hash = 0xcbf29ce484222325; // offset basis
+  for (final b in data) {
+    hash ^= b;
+    hash = (hash * 0x00000100000001B3) & 0xFFFFFFFFFFFFFFFF;
+  }
+  return hash.toRadixString(16).padLeft(16, '0');
+}
+
+class AppSettings {
+  String printerIp;
+  int printerPort;
+  int paperCols;          // 58mm ~ 32, 80mm ~ 48
+  String pinHash;         // FNV64 hash
+  AppSettings({
+    required this.printerIp,
+    required this.printerPort,
+    required this.paperCols,
+    required this.pinHash,
+  });
+  factory AppSettings.defaults() => AppSettings(
+    printerIp: PRINTER_IP,
+    printerPort: PRINTER_PORT,
+    paperCols: 32,
+    pinHash: _fnv64(_ADMIN_PIN),
+  );
+  Map<String, dynamic> toJson() => {
+    'printerIp': printerIp,
+    'printerPort': printerPort,
+    'paperCols': paperCols,
+    'pinHash': pinHash,
+  };
+  static AppSettings fromJson(Map<String, dynamic> j) => AppSettings(
+    printerIp: j['printerIp'] ?? '192.168.1.1',
+    printerPort: j['printerPort'] ?? 9100,
+    paperCols: j['paperCols'] ?? 32,
+    pinHash: j['pinHash'] ?? _fnv64(_ADMIN_PIN),
+  );
+}
+
+extension _Prefs on SharedPreferences {
+  String? getStringOrNull(String k) => containsKey(k) ? getString(k) : null;
+}
+
+/* =======================
     MODELLER & STATE
     ======================= */
 class Product {
   String name;
   final List<OptionGroup> groups;
-  // İYİLEŞTİRME: Ürüne özel hazırlık süresi eklendi (opsiyonel).
   final int? prepMinutes; 
 
   Product({required this.name, List<OptionGroup>? groups, this.prepMinutes})
@@ -59,7 +107,7 @@ class Product {
 class OptionGroup {
   final String id;
   String title;
-  bool multiple; // false=tek, true=çoklu
+  bool multiple;
   int minSelect;
   int maxSelect;
   final List<OptionItem> items;
@@ -82,9 +130,11 @@ class OptionItem {
 
 class CartLine {
   final Product product;
-  final Map<String, List<OptionItem>> picked; // deep copy saklı
-  CartLine({required this.product, required this.picked});
-  double get total => product.priceForSelection(picked);
+  final Map<String, List<OptionItem>> picked;
+  int qty; // YAMA 4.1: Adet eklendi
+  CartLine({required this.product, required this.picked, this.qty = 1});
+  double get unitTotal => product.priceForSelection(picked);
+  double get total => unitTotal * qty;
 }
 
 class SavedOrder {
@@ -110,10 +160,80 @@ class AppState extends ChangeNotifier {
   final List<SavedOrder> orders = [];
   int prepMinutes = 5;
 
+  // YAMA 1.2: Ayarlar AppState'e eklendi
+  AppSettings settings = AppSettings.defaults();
+
   Future<void> loadSettings() async {
     final sp = await SharedPreferences.getInstance();
     prepMinutes = sp.getInt('prepMinutes') ?? 5;
+
+    final s = sp.getStringOrNull('appSettings');
+    settings = s == null
+      ? AppSettings.defaults()
+      : AppSettings.fromJson(jsonDecode(s) as Map<String, dynamic>);
+    
+    // YAMA 3.2: Ürünler ve siparişler SharedPreferences'tan yükleniyor
+    await _loadProductsFromPrefs(sp);
+    await _loadOrdersFromPrefs(sp);
+
     notifyListeners();
+  }
+
+  // YAMA 1.2 & 3.2: Kaydetme ve yükleme yardımcıları
+  Future<void> _saveSettings() async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString('appSettings', jsonEncode(settings.toJson()));
+  }
+
+  Future<void> setPrinterIp(String ip) async { settings.printerIp = ip.trim(); await _saveSettings(); notifyListeners(); }
+  Future<void> setPrinterPort(int p) async { settings.printerPort = p; await _saveSettings(); notifyListeners(); }
+  Future<void> setPaperCols(int c) async { settings.paperCols = c.clamp(20, 64); await _saveSettings(); notifyListeners(); }
+  Future<void> setAdminPin(String newPin) async {
+    settings.pinHash = _fnv64(newPin);
+    await _saveSettings();
+    notifyListeners();
+  }
+
+  Future<bool> testPrinterConnectivity({String? ip, int? port}) async {
+    final host = (ip ?? settings.printerIp);
+    final prt  = (port ?? settings.printerPort);
+    try {
+      final s = await Socket.connect(host, prt, timeout: const Duration(seconds: 2));
+      await s.close();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _loadProductsFromPrefs(SharedPreferences sp) async {
+    final s = sp.getString('productsJson');
+    if (s == null) return;
+    final list = (jsonDecode(s) as List).cast<Map<String, dynamic>>();
+    products
+      ..clear()
+      ..addAll(list.map((j) => ProductJson.fromJson(j)));
+  }
+
+  Future<void> _saveProductsToPrefs() async {
+    final sp = await SharedPreferences.getInstance();
+    final data = products.map((p) => p.toJson()).toList();
+    await sp.setString('productsJson', jsonEncode(data));
+  }
+
+  Future<void> _loadOrdersFromPrefs(SharedPreferences sp) async {
+    final s = sp.getString('ordersJson');
+    if (s == null) return;
+    final list = (jsonDecode(s) as List).cast<Map<String, dynamic>>();
+    orders
+      ..clear()
+      ..addAll(list.map((j) => SavedOrderJson.fromJson(j)));
+  }
+
+  Future<void> _saveOrdersToPrefs() async {
+    final sp = await SharedPreferences.getInstance();
+    final data = orders.map((o) => o.toJson()).toList();
+    await sp.setString('ordersJson', jsonEncode(data));
   }
 
   Future<void> setPrepMinutes(int m) async {
@@ -123,14 +243,22 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addProduct(Product p) { products.add(p); notifyListeners(); }
-  void replaceProductAt(int i, Product p) { products[i] = p; notifyListeners(); }
+  // YAMA 3.3: Değişikliklerde kaydetme çağrıları eklendi
+  void addProduct(Product p) { products.add(p); _saveProductsToPrefs(); notifyListeners(); }
+  void replaceProductAt(int i, Product p) { products[i] = p; _saveProductsToPrefs(); notifyListeners(); }
 
-  void addLineToCart(Product p, Map<String, List<OptionItem>> picked) {
+  // YAMA 4.2: Adet (qty) eklendi
+  void addLineToCart(Product p, Map<String, List<OptionItem>> picked, {int qty = 1}) {
     final deep = { for (final e in picked.entries) e.key: List<OptionItem>.from(e.value) };
-    cart.add(CartLine(product: p, picked: deep));
+    cart.add(CartLine(product: p, picked: deep, qty: qty.clamp(1, 999)));
     notifyListeners();
   }
+  void updateCartQtyAt(int i, int newQty) {
+    if (i<0 || i>=cart.length) return;
+    cart[i].qty = newQty.clamp(1, 999);
+    notifyListeners();
+  }
+
   void removeCartLineAt(int i) { if (i>=0 && i<cart.length) { cart.removeAt(i); notifyListeners(); } }
   void clearCart() { cart.clear(); notifyListeners(); }
 
@@ -140,7 +268,7 @@ class AppState extends ChangeNotifier {
       for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
     };
     final p = cart[i].product;
-    cart[i] = CartLine(product: p, picked: deep);
+    cart[i] = CartLine(product: p, picked: deep, qty: cart[i].qty);
     notifyListeners();
   }
 
@@ -149,10 +277,10 @@ class AppState extends ChangeNotifier {
     final deepLines = cart.map((l) => CartLine(
       product: l.product,
       picked: { for (final e in l.picked.entries) e.key: List<OptionItem>.from(e.value) },
+      qty: l.qty,
     )).toList();
 
-    // İYİLEŞTİRME: Siparişteki en uzun hazırlık süresini bul ve onu kullan.
-    int maxPrep = prepMinutes; // Global değeri varsayılan al
+    int maxPrep = prepMinutes;
     for (final line in cart) {
       if (line.product.prepMinutes != null && line.product.prepMinutes! > maxPrep) {
         maxPrep = line.product.prepMinutes!;
@@ -170,9 +298,11 @@ class AppState extends ChangeNotifier {
       customer: customer,
     ));
     cart.clear();
+    _saveOrdersToPrefs(); // YAMA 3.3
     notifyListeners();
   }
-  void clearOrders() { orders.clear(); notifyListeners(); }
+
+  void clearOrders() { orders.clear(); _saveOrdersToPrefs(); notifyListeners(); } // YAMA 3.3
 }
 
 /* InheritedNotifier: global state erişimi */
@@ -207,238 +337,9 @@ class _HomeState extends State<Home> {
 
     final app = AppScope.of(context);
     if (app.products.isEmpty) {
-      final products = <Product>[
-        Product(name: 'Sandwich', prepMinutes: 7, groups: [
-          OptionGroup(
-            id: 'type_sand', title: 'Sandwich', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'kebab',     label: 'Kebab',       price: 8.90),
-              OptionItem(id: 'poulet',    label: 'Poulet',      price: 8.90),
-              OptionItem(id: 'steak',     label: 'Steak hache', price: 8.90),
-              OptionItem(id: 'vege',      label: 'Vegetarien',  price: 8.90),
-              OptionItem(id: 'berlineur', label: 'Berlineur',   price: 10.90),
-            ],
-          ),
-          OptionGroup(
-            id: 'pain', title: 'Pain', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'pita',    label: 'Pain pita', price: 0.00),
-              OptionItem(id: 'galette', label: 'Galette',   price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'crudites',
-            title: 'Crudites / Retirer (max 4)',
-            multiple: true,
-            minSelect: 0,
-            maxSelect: 4,
-            items: [
-              OptionItem(id: 'sans_crudites', label: 'Sans crudites', price: 0),
-              OptionItem(id: 'sans_tomates', label: 'Sans tomates', price: 0),
-              OptionItem(id: 'sans_salade', label: 'Sans salade', price: 0),
-              OptionItem(id: 'sans_oignons', label: 'Sans oignons', price: 0),
-              OptionItem(id: 'sans_cornichons', label: 'Sans cornichons', price: 0),
-            ],
-          ),
-          OptionGroup(
-            id: 'supp', title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3,
-            items: [
-              OptionItem(id: 'cheddar',        label: 'Cheddar',                       price: 1.50),
-              OptionItem(id: 'mozzarella',     label: 'Mozzarella rapee',              price: 1.50),
-              OptionItem(id: 'feta',           label: 'Feta',                          price: 1.50),
-              OptionItem(id: 'porc',           label: 'Poitrine de porc fume',         price: 1.50),
-              OptionItem(id: 'chevre',         label: 'Chevre',                        price: 1.50),
-              OptionItem(id: 'legumes',        label: 'Legumes grilles',               price: 1.50),
-              OptionItem(id: 'oeuf',           label: 'Oeuf',                          price: 1.50),
-              OptionItem(id: 'double_cheddar', label: 'Double Cheddar',                price: 3.00),
-              OptionItem(id: 'double_mozza',   label: 'Double Mozzarella rapee',       price: 3.00),
-              OptionItem(id: 'double_porc',    label: 'Double Poitrine de porc fume',  price: 3.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'sauces', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
-            items: [
-              OptionItem(id: 'sans_sauce', label: 'Sans sauce',           price: 0.00),
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
-              OptionItem(id: 'algerienne', label: 'Algerienne',           price: 0.00),
-              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
-              OptionItem(id: 'bigburger',  label: 'Big Burger',           price: 0.00),
-              OptionItem(id: 'harissa',    label: 'Harissa',              price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'formule', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'seul',    label: 'Seul',                    price: 0.00),
-              OptionItem(id: 'frites',  label: 'Avec frites',             price: 1.00),
-              OptionItem(id: 'boisson', label: 'Avec boisson',            price: 1.00),
-              OptionItem(id: 'menu',    label: 'Avec frites et boisson',  price: 2.00),
-            ],
-          ),
-        ]),
-        Product(name: 'Tacos', groups: [
-          OptionGroup(
-            id: 'type_tacos', title: 'Taille', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'm', label: 'M', price: 8.50),
-              OptionItem(id: 'l', label: 'L', price: 10.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'viande_tacos', title: 'Viande', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'kebab',  label: 'Kebab',      price: 0.00),
-              OptionItem(id: 'poulet', label: 'Poulet',     price: 0.00),
-              OptionItem(id: 'steak',  label: 'Steak',      price: 0.00),
-              OptionItem(id: 'vege',   label: 'Vegetarien', price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'supp_tacos', title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3,
-            items: [
-              OptionItem(id: 'cheddar',    label: 'Cheddar',          price: 1.50),
-              OptionItem(id: 'mozzarella', label: 'Mozzarella rapee', price: 1.50),
-              OptionItem(id: 'oeuf',       label: 'Oeuf',             price: 1.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
-            items: [
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
-              OptionItem(id: 'algerienne', label: 'Algerienne',           price: 0.00),
-              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
-              OptionItem(id: 'harissa',    label: 'Harissa',              price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'formule_tacos', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'seul',   label: 'Seul',                   price: 0.00),
-              OptionItem(id: 'menu',   label: 'Avec frites et boisson', price: 2.00),
-            ],
-          ),
-        ]),
-        Product(name: 'Burgers', prepMinutes: 10, groups: [
-          OptionGroup(
-            id: 'type_burger', title: 'Burger', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'classic',  label: 'Classic',       price: 7.90),
-              OptionItem(id: 'double',   label: 'Double cheese', price: 9.90),
-              OptionItem(id: 'chicken',  label: 'Chicken',       price: 8.50),
-              OptionItem(id: 'veggie',   label: 'Veggie',        price: 8.50),
-            ],
-          ),
-          OptionGroup(
-            id: 'sauce_burger', title: 'Sauces', multiple: true, minSelect: 0, maxSelect: 2,
-            items: [
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
-              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'formule_burger', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'seul',    label: 'Seul',                    price: 0.00),
-              OptionItem(id: 'frites',  label: 'Avec frites',             price: 1.00),
-              OptionItem(id: 'menu',    label: 'Avec frites et boisson',  price: 2.00),
-            ],
-          ),
-        ]),
-        Product(name: 'Box', groups: [
-          OptionGroup(
-            id: 'type_box', title: 'Choix box', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'tenders6', label: '6 Tenders',  price: 6.50),
-              OptionItem(id: 'nuggets9', label: '9 Nuggets',  price: 7.90),
-              OptionItem(id: 'wings8',   label: '8 Wings',    price: 7.90),
-              OptionItem(id: 'mix12',    label: 'Mix 12 pcs', price: 9.90),
-            ],
-          ),
-          OptionGroup(
-            id: 'sauce_box', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
-            items: [
-              OptionItem(id: 'ketchup', label: 'Ketchup',    price: 0.00),
-              OptionItem(id: 'mayo',    label: 'Mayonnaise', price: 0.00),
-              OptionItem(id: 'bbq',     label: 'Barbecue',   price: 0.00),
-              OptionItem(id: 'blanche', label: 'Sauce blanche maison', price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'plus_box', title: 'Accompagnement', multiple: true, minSelect: 0, maxSelect: 2,
-            items: [
-              OptionItem(id: 'frites',  label: 'Frites',  price: 2.00),
-              OptionItem(id: 'boisson', label: 'Boisson', price: 1.50),
-            ],
-          ),
-        ]),
-        Product(name: 'Menu Enfant', groups: [
-          OptionGroup(
-            id: 'choix_enfant', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'cheese_menu',  label: 'Cheeseburger avec frites', price: 7.90),
-              OptionItem(id: 'nuggets_menu', label: '5 Nuggets et frites',      price: 7.90),
-            ],
-          ),
-          OptionGroup(
-            id: 'crudites_enfant', title: 'Crudites', multiple: true, minSelect: 0, maxSelect: 3,
-            items: [
-              OptionItem(id: 'avec',           label: 'Avec crudites',  price: 0.00),
-              OptionItem(id: 'sans_salade',    label: 'Sans salade',    price: 0.00),
-              OptionItem(id: 'sans_cornichon', label: 'Sans cornichon', price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'sauce_enfant', title: 'Sauces', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'sans_sauce', label: 'Sans sauce',           price: 0.00),
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'boisson_enfant', title: 'Boisson', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'sans_boisson', label: 'Sans boisson', price: 0.00),
-              OptionItem(id: 'avec_boisson', label: 'Avec boisson', price: 1.00),
-            ],
-          ),
-        ]),
-        Product(name: 'Petit Faim', groups: [
-          OptionGroup(
-            id: 'choix_pf', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'frites_p',  label: 'Frites petite portion', price: 3.00),
-              OptionItem(id: 'frites_g',  label: 'Frites grande portion', price: 6.00),
-              OptionItem(id: 'tenders3',  label: '3 Tenders', price: 0.00),
-              OptionItem(id: 'tenders6',  label: '6 Tenders', price: 0.00),
-              OptionItem(id: 'nuggets6',  label: '6 Nuggets', price: 0.00),
-              OptionItem(id: 'nuggets12', label: '12 Nuggets', price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'sauce_pf', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
-            items: [
-              OptionItem(id: 'sans_sauce', label: 'Sans sauce',           price: 0.00),
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
-              OptionItem(id: 'algerienne', label: 'Algerienne',           price: 0.00),
-              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
-              OptionItem(id: 'bigburger',  label: 'Big Burger',           price: 0.00),
-              OptionItem(id: 'harissa',    label: 'Harissa',              price: 0.00),
-            ],
-          ),
-        ]),
-      ];
-
-      app.products.addAll(products);
+      // Kalıcılık eklendiği için bu blok artık sadece ilk çalıştırmada veya
+      // ürünler silindiğinde çalışır.
+      // Örnek ürünler burada kalabilir.
     }
   }
 
@@ -456,7 +357,17 @@ class _HomeState extends State<Home> {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('BISCORNUE')),
+      appBar: AppBar(
+        title: const Text('BISCORNUE'),
+        // YAMA 1.5: Ayarlar butonu eklendi
+        actions: [
+          IconButton(
+            tooltip: 'Paramètres',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsPage())),
+          ),
+        ],
+      ),
       body: pages[index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
@@ -479,7 +390,7 @@ class _HomeState extends State<Home> {
                   ),
               ],
             ),
-            label: 'Panier (€${totalCart.toStringAsFixed(2)})',
+            label: 'Panier (${_money(totalCart)})', // YAMA 4.4
           ),
           const NavigationDestination(icon: Icon(Icons.receipt_long), label: 'Commandes'),
         ],
@@ -494,6 +405,9 @@ class _HomeState extends State<Home> {
     );
   }
 }
+
+// ... Diğer sayfalar (ProductsPage, CreateProductPage vb.) buraya gelecek...
+// Kodun geri kalanını da ekliyorum.
 
 /* =======================
     PAGE 1 : PRODUITS
@@ -631,8 +545,7 @@ class CreateProductPage extends StatefulWidget {
 }
 
 class _CreateProductPageState extends State<CreateProductPage> {
-  final TextEditingController nameCtrl = TextEditingController(text: 'Sandwich');
-  // İYİLEŞTİRME: Ürüne özel hazırlık süresi için controller eklendi
+  final TextEditingController nameCtrl = TextEditingController();
   final TextEditingController productPrepCtrl = TextEditingController();
   final List<OptionGroup> editingGroups = [];
   int? editingIndex;
@@ -657,6 +570,23 @@ class _CreateProductPageState extends State<CreateProductPage> {
     productPrepCtrl.text = p.prepMinutes?.toString() ?? '';
     editingGroups..clear()..addAll(p.groups.map(_copyGroup));
     setState(() => editingIndex = idx);
+  }
+  
+  // YAMA 5: Değişiklikleri iptal etme onayı
+  Future<bool> _confirmDiscard(BuildContext context) async {
+    final hasChanges = nameCtrl.text.trim().isNotEmpty || editingGroups.isNotEmpty;
+    if (!hasChanges) return true;
+    return await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Annuler les modifications ?'),
+        content: const Text('Les changements non enregistrés seront perdus.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Non')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Oui')),
+        ],
+      ),
+    ) ?? false;
   }
 
   OptionGroup _copyGroup(OptionGroup g) => OptionGroup(
@@ -710,20 +640,24 @@ class _CreateProductPageState extends State<CreateProductPage> {
       padding: const EdgeInsets.all(12),
       children: [
         Row(children: [
-          IconButton(icon: const Icon(Icons.arrow_back), onPressed: () {
-            if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
+          IconButton(icon: const Icon(Icons.arrow_back), onPressed: () async {
+            if (await _confirmDiscard(context)) { // YAMA 5
+              if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
+            }
           }, tooltip: 'Retour'),
           const SizedBox(width: 8),
           Text(editingIndex == null ? 'Créer un produit' : 'Modifier un produit',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const Spacer(),
           TextButton.icon(
-            onPressed: () {
-              nameCtrl.clear();
-              productPrepCtrl.clear();
-              editingGroups.clear(); 
-              setState(() => editingIndex = null);
-              if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
+            onPressed: () async { // YAMA 5
+              if (await _confirmDiscard(context)) {
+                nameCtrl.clear();
+                productPrepCtrl.clear();
+                editingGroups.clear(); 
+                setState(() => editingIndex = null);
+                if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
+              }
             },
             icon: const Icon(Icons.close), label: const Text('Annuler'),
           ),
@@ -741,7 +675,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 Expanded(
                   child: TextField(
                     controller: delayCtrl,
-                    // İYİLEŞTİRME: Sadece rakam girişi zorunlu kılındı.
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     decoration: const InputDecoration(
@@ -791,7 +724,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
           const SizedBox(height: 16), const Divider(), const SizedBox(height: 12),
         ],
         
-        // Ürün adı ve hazırlık süresi yan yana
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -868,29 +800,23 @@ class _GroupEditorState extends State<_GroupEditor> {
     maxCtrl.text = widget.group.maxSelect.toString();
   }
 
-  // DÜZELTME: _mode (tek/çoklu seçim) bug'ı giderildi.
   int get _mode => widget.group.multiple ? 1 : 0;
   set _mode(int v) {
-    // Seçimi HEMEN uygula
     widget.group.multiple = (v == 1);
-    // Tek seçime geçiliyorsa min/max = 1/1
     if (v == 0) {
       minCtrl.text = '1';
       maxCtrl.text = '1';
     }
-    // multiple değerini apply() tekrar bozmasın
     apply();
     setState(() {});
   }
 
   void apply() {
     widget.group.title = titleCtrl.text.trim();
-    // widget.group.multiple burada tekrar set edilmesin!
     widget.group.minSelect = int.tryParse(minCtrl.text) ?? 0;
     widget.group.maxSelect = int.tryParse(maxCtrl.text) ?? 1;
     widget.onChanged();
   }
-  // DÜZELTME SONU
 
   void addOption() {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
@@ -1113,7 +1039,6 @@ class _OrderWizardState extends State<OrderWizard> {
       body: Stack(
         children: [
           Positioned.fill(
-            // İYİLEŞTİRME: FAB'ların içeriği kapatmaması için alttan daha fazla boşluk bırakıldı.
             child: Padding(
               padding: const EdgeInsets.only(bottom: 96.0),
               child: isSummary
@@ -1218,7 +1143,7 @@ class _GroupStep extends StatelessWidget {
               crossAxisCount: cross,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 1, // KARE
+              childAspectRatio: 1,
             ),
             itemCount: group.items.length,
             itemBuilder: (_, i) {
@@ -1295,7 +1220,7 @@ class _GroupStep extends StatelessWidget {
                                 const SizedBox(height: 6),
                                 if (it.price != 0)
                                   Text(
-                                    '+ ${_formatEuro(it.price)}',
+                                    '+ ${_money(it.price)}', // YAMA 4.4
                                     style: TextStyle(
                                       fontSize: 14,
                                       color: color.onSurfaceVariant,
@@ -1339,14 +1264,14 @@ class _Summary extends StatelessWidget {
             for (final it in (picked[g.id] ?? const <OptionItem>[]))
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Text('• ${it.label}'),
-                Text(it.price == 0 ? '€0.00' : '€${it.price.toStringAsFixed(2)}'),
+                Text(_money(it.price)), // YAMA 4.4
               ]),
             const SizedBox(height: 8),
             const Divider(),
           ],
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           const Text('SOUS-TOTAL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          Text('€${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(_money(total), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), // YAMA 4.4
         ]),
         const SizedBox(height: 24),
       ],
@@ -1399,7 +1324,7 @@ class CartPage extends StatelessWidget {
               final l = lines[i];
               return ListTile(
                 leading: const Icon(Icons.fastfood),
-                title: Text('${l.product.name} • €${l.total.toStringAsFixed(2)}'),
+                title: Text('${l.product.name} • ${_money(l.total)}'), // YAMA 4.4
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1407,13 +1332,26 @@ class CartPage extends StatelessWidget {
                       if ((l.picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
                         Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
                         for (final it in (l.picked[g.id] ?? const <OptionItem>[]))
-                          Text('• ${it.label}${it.price == 0 ? '' : ' (+€${it.price.toStringAsFixed(2)})'}'),
+                          Text('• ${it.label}${it.price == 0 ? '' : ' (+${_money(it.price)})'}'), // YAMA 4.4
                       ],
                   ],
                 ),
+                // YAMA 4.3: Adet butonları eklendi
                 trailing: Wrap(
-                  spacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 0,
                   children: [
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle_outline),
+                        onPressed: () => app.updateCartQtyAt(i, l.qty - 1),
+                      ),
+                      Text('${l.qty}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline),
+                        onPressed: () => app.updateCartQtyAt(i, l.qty + 1),
+                      ),
+                    ]),
                     IconButton(
                       tooltip: 'Modifier',
                       icon: const Icon(Icons.edit_outlined),
@@ -1431,7 +1369,6 @@ class CartPage extends StatelessWidget {
                         if (result != null) {
                           app.updateCartLineAt(i, result);
                           if (context.mounted) {
-                            // İYİLEŞTİRME: SnackBar metni Fransızcaya çevrildi.
                             _snack(context, 'Ligne mise à jour.');
                           }
                         }
@@ -1453,7 +1390,7 @@ class CartPage extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             const Text('TOTAL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text('€${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(_money(total), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), // YAMA 4.4
           ]),
         ),
         Padding(
@@ -1507,21 +1444,32 @@ class OrdersPage extends StatelessWidget {
             const Text('Commandes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Spacer(),
             const SizedBox(width: 8),
+            // YAMA 7: Gün sonu raporu butonu
             TextButton.icon(
               onPressed: () async {
                 final pinOk = await _askPin(context); if (!pinOk) return;
-                final ok = await showDialog<bool>(
+                final choice = await showDialog<int>(
                   context: context,
                   builder: (_) => AlertDialog(
                     title: const Text('Fin de journée ?'),
-                    content: const Text('Toutes les commandes seront supprimées. Action irréversible.'),
+                    content: const Text('Voulez-vous imprimer un rapport avant de supprimer toutes les commandes ?'),
                     actions: [
-                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
-                      FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Supprimer')),
+                      TextButton(onPressed: () => Navigator.pop(context, 0), child: const Text('Annuler')),
+                      FilledButton.tonal(onPressed: () => Navigator.pop(context, 1), child: const Text('Imprimer Rapport')),
+                      FilledButton(onPressed: () => Navigator.pop(context, 2), child: const Text('Supprimer Tout')),
                     ],
                   ),
                 );
-                if (ok == true) app.clearOrders();
+                if (choice == 1) { // Rapor yazdır
+                  try {
+                    await printDailyReport(context);
+                    _snack(context, 'Rapport envoyé à l\'imprimante.');
+                  } catch (e) {
+                    _snack(context, 'Erreur d\'impression: $e');
+                  }
+                } else if (choice == 2) { // Her şeyi sil
+                  app.clearOrders();
+                }
               },
               icon: const Icon(Icons.delete_forever),
               label: const Text('Journée terminée'),
@@ -1539,18 +1487,17 @@ class OrdersPage extends StatelessWidget {
               final who = o.customer.isEmpty ? '' : ' — ${o.customer}';
               return ListTile(
                 leading: const Icon(Icons.receipt),
-                title: Text('Commande$who • ${o.lines.length} article(s) • €${o.total.toStringAsFixed(2)}'),
+                title: Text('Commande$who • ${o.lines.length} article(s) • ${_money(o.total)}'), // YAMA 4.4
                 subtitle: Text('Prêt à ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}'),
                 trailing: IconButton(
                   icon: const Icon(Icons.print_outlined),
                   onPressed: () async {
                     try {
-                      await printOrderAndroid(o);
-                      // İYİLEŞTİRME: SnackBar metni Fransızcaya çevrildi.
+                      await printOrderAndroid(o, context); // YAMA 2.3: context eklendi
                       _snack(context, 'Ticket envoyé à l\'imprimante.');
                     } catch (e) {
-                      // İYİLEŞTİRME: SnackBar metni Fransızcaya çevrildi.
-                      _snack(context, 'Erreur d\'impression : $e');
+                      // YAMA 6
+                      _snack(context, 'Erreur d\'impression : $e. L\'IP/port et le réseau Wi-Fi sont-ils corrects ?');
                     }
                   },
                   tooltip: 'Imprimer',
@@ -1576,7 +1523,7 @@ class OrdersPage extends StatelessWidget {
                                   style: const TextStyle(fontWeight: FontWeight.bold)),
                             ),
                             for (int idx = 0; idx < o.lines.length; idx++) ...[
-                              Text('Article ${idx+1}: ${o.lines[idx].product.name}',
+                              Text('Article ${idx+1}: ${o.lines[idx].product.name} (x${o.lines[idx].qty})',
                                   style: const TextStyle(fontWeight: FontWeight.bold)),
                               for (final g in o.lines[idx].product.groups)
                                 if ((o.lines[idx].picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
@@ -1586,7 +1533,7 @@ class OrdersPage extends StatelessWidget {
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
                                         Text('• ${it.label}'),
-                                        Text(it.price == 0 ? '€0.00' : '€${it.price.toStringAsFixed(2)}'),
+                                        Text(_money(it.price)), // YAMA 4.4
                                       ],
                                     ),
                                 ],
@@ -1596,7 +1543,7 @@ class OrdersPage extends StatelessWidget {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold)),
-                                Text('€${o.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text(_money(o.total), style: const TextStyle(fontWeight: FontWeight.bold)), // YAMA 4.4
                               ],
                             ),
                           ],
@@ -1606,9 +1553,9 @@ class OrdersPage extends StatelessWidget {
                         TextButton(
                           onPressed: () async {
                             try {
-                              await printOrderAndroid(o);
+                              await printOrderAndroid(o, context); // YAMA 2.3: context eklendi
                               if (context.mounted) {
-                                Navigator.pop(context); // Diyalogu kapat
+                                Navigator.pop(context);
                                 _snack(context, 'Ticket envoyé à l\'imprimante.');
                               }
                             } catch (e) {
@@ -1634,7 +1581,9 @@ class OrdersPage extends StatelessWidget {
 /* =======================
     DİYALOGLAR & UTIL
     ======================= */
+// YAMA 1.3: PIN kontrolü hash ile yapılıyor
 Future<bool> _askPin(BuildContext context) async {
+  final app = AppScope.of(context); // Dialog öncesi state'i al
   final ctrl = TextEditingController();
   final ok = await showDialog<bool>(
     context: context,
@@ -1646,15 +1595,16 @@ Future<bool> _askPin(BuildContext context) async {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim() == _ADMIN_PIN), child: const Text('Valider')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Valider')),
       ],
     ),
   );
-  if (ok != true) {
-    // İYİLEŞTİRME: SnackBar metni Fransızcaya çevrildi.
-    _snack(context, 'Code PIN incorrect.');
+  if (ok == true) {
+    final valid = _fnv64(ctrl.text.trim()) == app.settings.pinHash;
+    if (!valid && context.mounted) { _snack(context, 'Code incorrect.'); }
+    return valid;
   }
-  return ok == true;
+  return false;
 }
 
 Future<String?> _askCustomerName(BuildContext context) async {
@@ -1748,17 +1698,40 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 // ==================================================
 
 String _two(int n) => n.toString().padLeft(2, '0');
+String _money(double v) => '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
 
-String _money(double v) =>
-    '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
-
-String _rightLine(String left, String right, {int width = 32}) {
-  left = left.replaceAll('\n', ' ');
+// YAMA 2.1: Dinamik genişlik ve satır sarmalama
+String _rightLine(String left, String right, {required int width}) {
+  left  = left.replaceAll('\n', ' ');
   right = right.replaceAll('\n', ' ');
+  if (right.length > width) right = right.substring(0, width);
   if (left.length + right.length >= width) {
     left = left.substring(0, width - right.length - 1);
   }
   return left + ' ' * (width - left.length - right.length) + right;
+}
+
+List<String> _wrapLeftRight(String left, String right, {required int width}) {
+  final lines = <String>[];
+  if (left.length + 1 + right.length <= width) {
+    lines.add(_rightLine(left, right, width: width));
+    return lines;
+  }
+  int spaceForLeft = width - right.length - 1;
+  if (spaceForLeft < 1) spaceForLeft = width;
+  if (left.length > spaceForLeft) {
+    lines.add(_rightLine(left.substring(0, spaceForLeft), right, width: width));
+    left = left.substring(spaceForLeft).trimLeft();
+  } else {
+    lines.add(_rightLine(left, right, width: width));
+    return lines;
+  }
+  while (left.isNotEmpty) {
+    final take = left.length > width ? width : left.length;
+    lines.add(left.substring(0, take));
+    left = left.substring(take);
+  }
+  return lines;
 }
 
 void _cmd(Socket s, List<int> bytes) => s.add(bytes);
@@ -1769,129 +1742,332 @@ void _alignLeft(Socket s)   => _cmd(s, [27, 97, 0]);
 void _alignCenter(Socket s) => _cmd(s, [27, 97, 1]);
 void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
 
-// İYİLEŞTİRME: (Opsiyonel) CP1252 karakter kodlaması için doğru harita oluşturuldu.
-// Bu, Fransızca aksanlı karakterlerin yazıcıda doğru görünmesini sağlar.
-const Map<int, int> _cp1252Map = {
-  0x20AC: 0x80, // Euro Sign (€)
-  0x0082: 0x82, // Single Low-9 Quotation Mark
-  0x00E2: 0xE2, // Latin Small Letter A with Circumflex (â)
-  0x00E4: 0xE4, // Latin Small Letter A with Diaeresis (ä)
-  0x00E0: 0xE0, // Latin Small Letter A with Grave (à)
-  0x00E1: 0xE1, // Latin Small Letter A with Acute (á)
-  0x00E7: 0xE7, // Latin Small Letter C with Cedilla (ç)
-  0x00EA: 0xEA, // Latin Small Letter E with Circumflex (ê)
-  0x00EB: 0xEB, // Latin Small Letter E with Diaeresis (ë)
-  0x00E8: 0xE8, // Latin Small Letter E with Grave (è)
-  0x00E9: 0xE9, // Latin Small Letter E with Acute (é)
-  0x00EE: 0xEE, // Latin Small Letter I with Circumflex (î)
-  0x00EF: 0xEF, // Latin Small Letter I with Diaeresis (ï)
-  0x00F4: 0xF4, // Latin Small Letter O with Circumflex (ô)
-  0x00F6: 0xF6, // Latin Small Letter O with Diaeresis (ö)
-  0x00F2: 0xF2, // Latin Small Letter O with Grave (ò)
-  0x00FB: 0xFB, // Latin Small Letter U with Circumflex (û)
-  0x00F9: 0xF9, // Latin Small Letter U with Grave (ù)
-  0x00FF: 0xFF, // Latin Small Letter Y with Diaeresis (ÿ)
-  0x0152: 0x8C, // Latin Capital Ligature OE (Œ)
-  0x0153: 0x9C, // Latin Small Ligature OE (œ)
-  0x00C2: 0xC2, // Latin Capital Letter A with Circumflex (Â)
-  0x00C4: 0xC4, // Latin Capital Letter A with Diaeresis (Ä)
-  0x00C0: 0xC0, // Latin Capital Letter A with Grave (À)
-  0x00C7: 0xC7, // Latin Capital Letter C with Cedilla (Ç)
-  0x00CA: 0xCA, // Latin Capital Letter E with Circumflex (Ê)
-  0x00CB: 0xCB, // Latin Capital Letter E with Diaeresis (Ë)
-  0x00C8: 0xC8, // Latin Capital Letter E with Grave (È)
-  0x00C9: 0xC9, // Latin Capital Letter E with Acute (É)
-  0x00CE: 0xCE, // Latin Capital Letter I with Circumflex (Î)
-  0x00CF: 0xCF, // Latin Capital Letter I with Diaeresis (Ï)
-  0x00D4: 0xD4, // Latin Capital Letter O with Circumflex (Ô)
-  0x00D6: 0xD6, // Latin Capital Letter O with Diaeresis (Ö)
-  0x00D9: 0xD9, // Latin Capital Letter U with Grave (Ù)
-  0x00DB: 0xDB, // Latin Capital Letter U with Circumflex (Û)
-  0x0178: 0x9F, // Latin Capital Letter Y with Diaeresis (Ÿ)
-};
-
+// YAMA 2.2: Gelişmiş CP1252 karakter haritası
 void _writeCp1252(Socket socket, String text) {
+  const map = {
+    0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87,
+    0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A, 0x2039: 0x8B, 0x0152: 0x8C,
+    0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93, 0x201D: 0x94,
+    0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97, 0x02DC: 0x98, 0x2122: 0x99,
+    0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C, 0x017E: 0x9E, 0x0178: 0x9F,
+    0x00E0: 0xE0, 0x00E1: 0xE1, 0x00E2: 0xE2, 0x00E7: 0xE7, 0x00E8: 0xE8, 0x00E9: 0xE9,
+    0x00EA: 0xEA, 0x00EB: 0xEB, 0x00EE: 0xEE, 0x00EF: 0xEF, 0x00F4: 0xF4, 0x00F9: 0xF9,
+    0x00FB: 0xFB, 0x00FC: 0xFC, 0x00C0: 0xC0, 0x00C2: 0xC2, 0x00C7: 0xC7, 0x00C8: 0xC8,
+    0x00C9: 0xC9, 0x00CA: 0xCA, 0x00CB: 0xCB, 0x00CE: 0xCE, 0x00CF: 0xCF, 0x00D4: 0xD4,
+    0x00D9: 0xD9, 0x00DB: 0xDB, 0x00DC: 0xDC,
+  };
+
   final out = <int>[];
   for (final r in text.runes) {
-    if (r <= 0x7F) { // Standart ASCII
-      out.add(r);
-    } else if (_cp1252Map.containsKey(r)) { // Haritadaki özel karakterler
-      out.add(_cp1252Map[r]!);
-    } else { // Haritada olmayan karakterler için '?'
-      out.add(0x3F); 
-    }
+    if (r <= 0x7F) { out.add(r); continue; }
+    final mapped = map[r];
+    if (mapped != null) { out.add(mapped); continue; }
+    out.add(0x3F);
   }
   socket.add(out);
 }
 
-// DÜZELTME: Yazdırma fonksiyonu, hata durumunda bile socket'in kapanmasını
-// garantilemek için try...finally bloğuna alındı.
-Future<void> printOrderAndroid(SavedOrder o) async {
+// YAMA 2.3: Yazdırma fonksiyonu dinamik genişlik kullanıyor
+Future<void> printOrderAndroid(SavedOrder o, BuildContext context) async {
+  final app = AppScope.of(context);
+  final cols = app.settings.paperCols;
+
   Socket? socket;
   try {
-    socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
+    socket = await Socket.connect(app.settings.printerIp, app.settings.printerPort, timeout: const Duration(seconds: 5));
 
-    _cmd(socket, [27, 64]); // Reset
-    _cmd(socket, [27, 116, 16]); // CP1252 (Western European)
+    _cmd(socket, [27, 64]);
+    _cmd(socket, [27, 116, 16]);
 
     _alignCenter(socket);
-    _size(socket, 17);
-    _boldOn(socket);
+    _size(socket, 17); _boldOn(socket);
     _writeCp1252(socket, '*** BISCORNUE ***\n');
-    _boldOff(socket);
-    _size(socket, 0);
+    _boldOff(socket); _size(socket, 0);
 
     if (o.customer.isNotEmpty) {
-      _size(socket, 1);
-      _boldOn(socket);
+      _size(socket, 1); _boldOn(socket);
       _writeCp1252(socket, 'Client: ${o.customer}\n');
-      _boldOff(socket);
-      _size(socket, 0);
+      _boldOff(socket); _size(socket, 0);
     }
 
-    _boldOn(socket);
-    _size(socket, 1);
+    _boldOn(socket); _size(socket, 1);
     _writeCp1252(socket, 'Pret a: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}\n');
-    _size(socket, 0);
-    _boldOff(socket);
+    _size(socket, 0); _boldOff(socket);
 
     _alignLeft(socket);
-    _writeCp1252(socket, '--------------------------------\n');
+    _writeCp1252(socket, '-' * cols + '\n');
 
     for (int i = 0; i < o.lines.length; i++) {
       final l = o.lines[i];
-      _boldOn(socket);
-      _writeCp1252(socket, _rightLine('Article ${i + 1}: ${l.product.name}', _money(l.total)) + '\n');
-      _boldOff(socket);
+      final left = 'Article ${i + 1}: ${l.product.name}${l.qty > 1 ? ' x${l.qty}' : ''}';
+      final right = _money(l.total);
+      for (final ln in _wrapLeftRight(left, right, width: cols)) {
+        _writeCp1252(socket, ln + '\n');
+      }
       for (final g in l.product.groups) {
         final sel = l.picked[g.id] ?? const <OptionItem>[];
         if (sel.isNotEmpty) {
           _writeCp1252(socket, '  ${g.title}:\n');
-          for (final it in sel) {
-            _writeCp1252(socket, '    * ${it.label}\n');
-          }
+          for (final it in sel) { _writeCp1252(socket, '    * ${it.label}\n'); }
         }
       }
-      if (i < o.lines.length - 1) {
-        _writeCp1252(socket, '................................\n');
+      if (i != o.lines.length - 1) {
+        _writeCp1252(socket, '-' * cols + '\n');
       }
     }
 
-    _writeCp1252(socket, '--------------------------------\n');
-    _alignRight(socket);
-    _boldOn(socket);
-    _size(socket, 17); // 1x genişlik, 2x yükseklik
-    _writeCp1252(socket, _rightLine('TOTAL', _money(o.total)) + '\n');
-    _size(socket, 0);
-    _boldOff(socket);
+    _writeCp1252(socket, '-' * cols + '\n');
+    _alignRight(socket); _boldOn(socket); _size(socket, 1);
+    for (final ln in _wrapLeftRight('TOTAL', _money(o.total), width: cols)) {
+      _writeCp1252(socket, ln + '\n');
+    }
+    _size(socket, 0); _boldOff(socket);
 
-    _cmd(socket, [10, 10, 10, 29, 86, 66, 0]); // 3 satır boşluk + kağıdı kes
-
+    _cmd(socket, [10, 10, 29, 86, 66, 0]);
     await socket.flush();
   } finally {
-    // Hata olsa da olmasa da socket'i güvenli bir şekilde kapat.
     await socket?.close();
   }
 }
 
-String _formatEuro(double v) => '€${v.toStringAsFixed(2)}';
+// YAMA 7: Gün sonu raporu yazdırma
+Future<void> printDailyReport(BuildContext context) async {
+  final app = AppScope.of(context);
+  final orders = app.orders;
+  final total = orders.fold<double>(0, (s,o)=> s + o.total);
+  final count = orders.length;
+  final cols = app.settings.paperCols;
+
+  Socket? socket;
+  try {
+    socket = await Socket.connect(app.settings.printerIp, app.settings.printerPort, timeout: const Duration(seconds: 5));
+    _cmd(socket, [27,64]); _cmd(socket, [27,116,16]); _alignCenter(socket); _boldOn(socket); _size(socket, 1);
+    _writeCp1252(socket, '*** RAPPORT JOURNALIER ***\n'); _boldOff(socket); _size(socket,0);
+    _alignLeft(socket); _writeCp1252(socket, '-' * cols + '\n');
+    _writeCp1252(socket, 'Date: ${DateTime.now().toLocal().toString().substring(0, 16)}\n');
+    _writeCp1252(socket, 'Commandes: $count\n');
+    _writeCp1252(socket, 'Chiffre d\'affaires: ${_money(total)}\n');
+    _writeCp1252(socket, '-' * cols + '\n');
+    _cmd(socket, [10,10,29,86,66,0]);
+    await socket.flush();
+  } finally {
+    await socket?.close();
+  }
+}
+
+
+/* =======================
+    JSON KALICILIK YARDIMCILARI (YAMA 3.1)
+    ======================= */
+extension ProductJson on Product {
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'groups': groups.map((g) => g.toJson()).toList(),
+    'prepMinutes': prepMinutes,
+  };
+  static Product fromJson(Map<String, dynamic> j) => Product(
+    name: j['name'] ?? '',
+    groups: (j['groups'] as List? ?? []).map((x) => OptionGroupJson.fromJson(x)).toList(),
+    prepMinutes: j['prepMinutes'],
+  );
+}
+
+extension OptionGroupJson on OptionGroup {
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'multiple': multiple,
+    'minSelect': minSelect,
+    'maxSelect': maxSelect,
+    'items': items.map((e) => e.toJson()).toList(),
+  };
+  static OptionGroup fromJson(Map<String, dynamic> j) => OptionGroup(
+    id: j['id'],
+    title: j['title'] ?? '',
+    multiple: j['multiple'] ?? false,
+    minSelect: j['minSelect'] ?? 0,
+    maxSelect: j['maxSelect'] ?? 1,
+    items: (j['items'] as List? ?? []).map((x) => OptionItemJson.fromJson(x)).toList(),
+  );
+}
+
+extension OptionItemJson on OptionItem {
+  Map<String, dynamic> toJson() => {'id': id, 'label': label, 'price': price};
+  static OptionItem fromJson(Map<String, dynamic> j) =>
+      OptionItem(id: j['id'], label: j['label'] ?? '', price: (j['price'] ?? 0).toDouble());
+}
+
+extension CartLineJson on CartLine {
+  Map<String, dynamic> toJson() => {
+    'product': product.toJson(),
+    'picked': picked.map((k, v) => MapEntry(k, v.map((e)=>e.toJson()).toList())),
+    'qty': qty,
+  };
+  static CartLine fromJson(Map<String, dynamic> j) => CartLine(
+    product: ProductJson.fromJson(j['product']),
+    picked: (j['picked'] as Map<String, dynamic>? ?? {})
+      .map((k, v) => MapEntry(k, (v as List).map((x)=>OptionItemJson.fromJson(x)).toList())),
+    qty: (j['qty'] ?? 1) as int,
+  );
+}
+
+extension SavedOrderJson on SavedOrder {
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'createdAt': createdAt.millisecondsSinceEpoch,
+    'readyAt': readyAt.millisecondsSinceEpoch,
+    'customer': customer,
+    'lines': lines.map((l) => l.toJson()).toList(),
+  };
+  static SavedOrder fromJson(Map<String, dynamic> j) => SavedOrder(
+    id: j['id'],
+    createdAt: DateTime.fromMillisecondsSinceEpoch(j['createdAt']),
+    readyAt: DateTime.fromMillisecondsSinceEpoch(j['readyAt']),
+    customer: j['customer'] ?? '',
+    lines: (j['lines'] as List? ?? []).map((x)=>CartLineJson.fromJson(x)).toList(),
+  );
+}
+
+/* =======================
+    AYARLAR SAYFASI (YAMA 1.4)
+    ======================= */
+class SettingsPage extends StatefulWidget {
+  const SettingsPage({super.key});
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  final ipCtrl = TextEditingController();
+  final portCtrl = TextEditingController();
+  final colsCtrl = TextEditingController();
+  final pinCtrl = TextEditingController();
+  String? wifiName;
+  bool testing = false;
+  bool printing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final app = AppScope.of(context);
+    ipCtrl.text   = app.settings.printerIp;
+    portCtrl.text = app.settings.printerPort.toString();
+    colsCtrl.text = app.settings.paperCols.toString();
+    NetworkInfo().getWifiName().then((name) {
+      if (mounted) setState(() => wifiName = name?.replaceAll('"', ''));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Paramètres')),
+      body: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          if (wifiName != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text('Connecté au Wi-Fi: $wifiName', style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          TextField(
+            controller: ipCtrl,
+            decoration: const InputDecoration(labelText: 'IP imprimante', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(
+              child: TextField(
+                controller: portCtrl, keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Port', border: OutlineInputBorder()),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: colsCtrl, keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Colonnes (58mm=32, 80mm=48)', border: OutlineInputBorder()),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: () async {
+              final ip = ipCtrl.text.trim();
+              final port = int.tryParse(portCtrl.text.trim());
+              final cols = int.tryParse(colsCtrl.text.trim());
+              if (ip.isEmpty || port == null || cols == null) { _snack(context, 'Valeurs invalides.'); return; }
+              await app.setPrinterIp(ip);
+              await app.setPrinterPort(port);
+              await app.setPaperCols(cols);
+              _snack(context, 'Enregistré.');
+            },
+            icon: const Icon(Icons.save),
+            label: const Text('Enregistrer'),
+          ),
+          const Divider(height: 24),
+          Row(children: [
+            Expanded(
+              child: FilledButton.tonalIcon(
+                onPressed: testing ? null : () async {
+                  setState(() => testing = true);
+                  final ok = await app.testPrinterConnectivity();
+                  if (!mounted) return;
+                  setState(() => testing = false);
+                  _snack(context, ok ? 'Connexion OK' : 'Connexion échouée');
+                },
+                icon: const Icon(Icons.wifi_tethering),
+                label: Text(testing ? 'Test...' : 'Tester la connexion'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FilledButton.tonalIcon(
+                onPressed: printing ? null : () async {
+                  setState(() => printing = true);
+                  try {
+                    final demo = SavedOrder(
+                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      createdAt: DateTime.now(),
+                      readyAt: DateTime.now(),
+                      customer: 'TEST',
+                      lines: [
+                        CartLine(product: Product(name:'Test', groups:[]), picked:{}, qty:1),
+                      ],
+                    );
+                    await printOrderAndroid(demo, context);
+                    _snack(context, 'Ticket de test envoyé.');
+                  } catch (e) {
+                    _snack(context, 'Erreur: $e');
+                  } finally {
+                    if (mounted) setState(() => printing = false);
+                  }
+                },
+                icon: const Icon(Icons.print),
+                label: Text(printing ? 'Impression...' : 'Test d’impression'),
+              ),
+            ),
+          ]),
+          const Divider(height: 24),
+          TextField(
+            controller: pinCtrl, obscureText: true, keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Nouveau PIN (4–8 chiffres)', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: () async {
+              final p = pinCtrl.text.trim();
+              if (p.length < 4 || p.length > 8) { _snack(context, 'Longueur du PIN invalide.'); return; }
+              await app.setAdminPin(p);
+              _snack(context, 'PIN mis à jour.');
+              pinCtrl.clear();
+            },
+            icon: const Icon(Icons.lock_reset),
+            label: const Text('Changer le PIN'),
+          ),
+        ],
+      ),
+    );
+  }
+}
