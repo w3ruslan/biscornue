@@ -1,9 +1,9 @@
 import 'dart:io';
-import 'dart:convert'; // Kalıcılık için eklendi
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'dart:convert';
+import 'package.flutter/material.dart';
+import 'package.flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:network_info_plus/network_info_plus.dart'; // Ayarlar sayfası için eklendi
+import 'package:network_info_plus/network_info_plus.dart';
 
 /* =======================
     Sabitler (Varsayılan Değerler)
@@ -35,12 +35,11 @@ class App extends StatelessWidget {
 }
 
 /* =======================
-    AYARLAR MODELİ (YAMA 1.1)
+    AYARLAR MODELİ
     ======================= */
-// Basit, ekstra paket gerektirmeyen bir "hash" (FNV-1a 64-bit)
 String _fnv64(String s, {String salt = 'bis-1'}) {
   final data = (salt + s).codeUnits;
-  int hash = 0xcbf29ce484222325; // offset basis
+  int hash = 0xcbf29ce484222325;
   for (final b in data) {
     hash ^= b;
     hash = (hash * 0x00000100000001B3) & 0xFFFFFFFFFFFFFFFF;
@@ -51,8 +50,8 @@ String _fnv64(String s, {String salt = 'bis-1'}) {
 class AppSettings {
   String printerIp;
   int printerPort;
-  int paperCols;          // 58mm ~ 32, 80mm ~ 48
-  String pinHash;         // FNV64 hash
+  int paperCols;
+  String pinHash;
   AppSettings({
     required this.printerIp,
     required this.printerPort,
@@ -131,7 +130,7 @@ class OptionItem {
 class CartLine {
   final Product product;
   final Map<String, List<OptionItem>> picked;
-  int qty; // YAMA 4.1: Adet eklendi
+  int qty;
   CartLine({required this.product, required this.picked, this.qty = 1});
   double get unitTotal => product.priceForSelection(picked);
   double get total => unitTotal * qty;
@@ -160,7 +159,6 @@ class AppState extends ChangeNotifier {
   final List<SavedOrder> orders = [];
   int prepMinutes = 5;
 
-  // YAMA 1.2: Ayarlar AppState'e eklendi
   AppSettings settings = AppSettings.defaults();
 
   Future<void> loadSettings() async {
@@ -172,14 +170,12 @@ class AppState extends ChangeNotifier {
       ? AppSettings.defaults()
       : AppSettings.fromJson(jsonDecode(s) as Map<String, dynamic>);
     
-    // YAMA 3.2: Ürünler ve siparişler SharedPreferences'tan yükleniyor
     await _loadProductsFromPrefs(sp);
     await _loadOrdersFromPrefs(sp);
 
     notifyListeners();
   }
 
-  // YAMA 1.2 & 3.2: Kaydetme ve yükleme yardımcıları
   Future<void> _saveSettings() async {
     final sp = await SharedPreferences.getInstance();
     await sp.setString('appSettings', jsonEncode(settings.toJson()));
@@ -187,7 +183,8 @@ class AppState extends ChangeNotifier {
 
   Future<void> setPrinterIp(String ip) async { settings.printerIp = ip.trim(); await _saveSettings(); notifyListeners(); }
   Future<void> setPrinterPort(int p) async { settings.printerPort = p; await _saveSettings(); notifyListeners(); }
-  Future<void> setPaperCols(int c) async { settings.paperCols = c.clamp(20, 64); await _saveSettings(); notifyListeners(); }
+  // YAMA 1: clamp -> int atama hatası düzeltildi
+  Future<void> setPaperCols(int c) async { settings.paperCols = c.clamp(20, 64).toInt(); await _saveSettings(); notifyListeners(); }
   Future<void> setAdminPin(String newPin) async {
     settings.pinHash = _fnv64(newPin);
     await _saveSettings();
@@ -206,13 +203,14 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // YAMA 2: JSON decode cast'leri sağlamlaştırıldı
   Future<void> _loadProductsFromPrefs(SharedPreferences sp) async {
     final s = sp.getString('productsJson');
     if (s == null) return;
-    final list = (jsonDecode(s) as List).cast<Map<String, dynamic>>();
-    products
-      ..clear()
-      ..addAll(list.map((j) => ProductJson.fromJson(j)));
+    final list = (jsonDecode(s) as List)
+        .map((e) => ProductJson.fromJson(e as Map<String, dynamic>))
+        .toList();
+    products..clear()..addAll(list);
   }
 
   Future<void> _saveProductsToPrefs() async {
@@ -224,10 +222,10 @@ class AppState extends ChangeNotifier {
   Future<void> _loadOrdersFromPrefs(SharedPreferences sp) async {
     final s = sp.getString('ordersJson');
     if (s == null) return;
-    final list = (jsonDecode(s) as List).cast<Map<String, dynamic>>();
-    orders
-      ..clear()
-      ..addAll(list.map((j) => SavedOrderJson.fromJson(j)));
+    final list = (jsonDecode(s) as List)
+        .map((e) => SavedOrderJson.fromJson(e as Map<String, dynamic>))
+        .toList();
+    orders..clear()..addAll(list);
   }
 
   Future<void> _saveOrdersToPrefs() async {
@@ -243,19 +241,18 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // YAMA 3.3: Değişikliklerde kaydetme çağrıları eklendi
   void addProduct(Product p) { products.add(p); _saveProductsToPrefs(); notifyListeners(); }
   void replaceProductAt(int i, Product p) { products[i] = p; _saveProductsToPrefs(); notifyListeners(); }
 
-  // YAMA 4.2: Adet (qty) eklendi
+  // YAMA 1: clamp -> int atama hatası düzeltildi
   void addLineToCart(Product p, Map<String, List<OptionItem>> picked, {int qty = 1}) {
     final deep = { for (final e in picked.entries) e.key: List<OptionItem>.from(e.value) };
-    cart.add(CartLine(product: p, picked: deep, qty: qty.clamp(1, 999)));
+    cart.add(CartLine(product: p, picked: deep, qty: qty.clamp(1, 999).toInt()));
     notifyListeners();
   }
   void updateCartQtyAt(int i, int newQty) {
     if (i<0 || i>=cart.length) return;
-    cart[i].qty = newQty.clamp(1, 999);
+    cart[i].qty = newQty.clamp(1, 999).toInt();
     notifyListeners();
   }
 
@@ -298,11 +295,11 @@ class AppState extends ChangeNotifier {
       customer: customer,
     ));
     cart.clear();
-    _saveOrdersToPrefs(); // YAMA 3.3
+    _saveOrdersToPrefs();
     notifyListeners();
   }
 
-  void clearOrders() { orders.clear(); _saveOrdersToPrefs(); notifyListeners(); } // YAMA 3.3
+  void clearOrders() { orders.clear(); _saveOrdersToPrefs(); notifyListeners(); }
 }
 
 /* InheritedNotifier: global state erişimi */
@@ -326,22 +323,7 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
-  bool _seeded = false;
   int index = 0;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_seeded) return;
-    _seeded = true;
-
-    final app = AppScope.of(context);
-    if (app.products.isEmpty) {
-      // Kalıcılık eklendiği için bu blok artık sadece ilk çalıştırmada veya
-      // ürünler silindiğinde çalışır.
-      // Örnek ürünler burada kalabilir.
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -359,7 +341,6 @@ class _HomeState extends State<Home> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('BISCORNUE'),
-        // YAMA 1.5: Ayarlar butonu eklendi
         actions: [
           IconButton(
             tooltip: 'Paramètres',
@@ -390,7 +371,7 @@ class _HomeState extends State<Home> {
                   ),
               ],
             ),
-            label: 'Panier (${_money(totalCart)})', // YAMA 4.4
+            label: 'Panier (${_money(totalCart)})',
           ),
           const NavigationDestination(icon: Icon(Icons.receipt_long), label: 'Commandes'),
         ],
@@ -405,9 +386,6 @@ class _HomeState extends State<Home> {
     );
   }
 }
-
-// ... Diğer sayfalar (ProductsPage, CreateProductPage vb.) buraya gelecek...
-// Kodun geri kalanını da ekliyorum.
 
 /* =======================
     PAGE 1 : PRODUITS
@@ -572,7 +550,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
     setState(() => editingIndex = idx);
   }
   
-  // YAMA 5: Değişiklikleri iptal etme onayı
   Future<bool> _confirmDiscard(BuildContext context) async {
     final hasChanges = nameCtrl.text.trim().isNotEmpty || editingGroups.isNotEmpty;
     if (!hasChanges) return true;
@@ -641,7 +618,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
       children: [
         Row(children: [
           IconButton(icon: const Icon(Icons.arrow_back), onPressed: () async {
-            if (await _confirmDiscard(context)) { // YAMA 5
+            if (await _confirmDiscard(context)) {
               if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
             }
           }, tooltip: 'Retour'),
@@ -650,7 +627,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const Spacer(),
           TextButton.icon(
-            onPressed: () async { // YAMA 5
+            onPressed: () async {
               if (await _confirmDiscard(context)) {
                 nameCtrl.clear();
                 productPrepCtrl.clear();
@@ -1220,7 +1197,7 @@ class _GroupStep extends StatelessWidget {
                                 const SizedBox(height: 6),
                                 if (it.price != 0)
                                   Text(
-                                    '+ ${_money(it.price)}', // YAMA 4.4
+                                    '+ ${_money(it.price)}',
                                     style: TextStyle(
                                       fontSize: 14,
                                       color: color.onSurfaceVariant,
@@ -1264,14 +1241,14 @@ class _Summary extends StatelessWidget {
             for (final it in (picked[g.id] ?? const <OptionItem>[]))
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Text('• ${it.label}'),
-                Text(_money(it.price)), // YAMA 4.4
+                Text(_money(it.price)),
               ]),
             const SizedBox(height: 8),
             const Divider(),
           ],
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           const Text('SOUS-TOTAL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          Text(_money(total), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), // YAMA 4.4
+          Text(_money(total), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         ]),
         const SizedBox(height: 24),
       ],
@@ -1308,7 +1285,21 @@ class CartPage extends StatelessWidget {
             const Text('Panier', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Spacer(),
             TextButton.icon(
-              onPressed: () => app.clearCart(),
+              // YAMA C: Sepeti boşaltma onayı
+              onPressed: () async {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Vider le panier ?'),
+                    content: const Text('Toutes les lignes seront supprimées.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
+                      FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Vider')),
+                    ],
+                  ),
+                );
+                if (ok == true) app.clearCart();
+              },
               icon: const Icon(Icons.delete_sweep),
               label: const Text('Vider'),
             ),
@@ -1324,7 +1315,7 @@ class CartPage extends StatelessWidget {
               final l = lines[i];
               return ListTile(
                 leading: const Icon(Icons.fastfood),
-                title: Text('${l.product.name} • ${_money(l.total)}'), // YAMA 4.4
+                title: Text('${l.product.name} • ${_money(l.total)}'),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1332,11 +1323,10 @@ class CartPage extends StatelessWidget {
                       if ((l.picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
                         Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
                         for (final it in (l.picked[g.id] ?? const <OptionItem>[]))
-                          Text('• ${it.label}${it.price == 0 ? '' : ' (+${_money(it.price)})'}'), // YAMA 4.4
+                          Text('• ${it.label}${it.price == 0 ? '' : ' (+${_money(it.price)})'}'),
                       ],
                   ],
                 ),
-                // YAMA 4.3: Adet butonları eklendi
                 trailing: Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 0,
@@ -1390,7 +1380,7 @@ class CartPage extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             const Text('TOTAL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text(_money(total), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), // YAMA 4.4
+            Text(_money(total), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ]),
         ),
         Padding(
@@ -1444,7 +1434,6 @@ class OrdersPage extends StatelessWidget {
             const Text('Commandes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Spacer(),
             const SizedBox(width: 8),
-            // YAMA 7: Gün sonu raporu butonu
             TextButton.icon(
               onPressed: () async {
                 final pinOk = await _askPin(context); if (!pinOk) return;
@@ -1460,14 +1449,14 @@ class OrdersPage extends StatelessWidget {
                     ],
                   ),
                 );
-                if (choice == 1) { // Rapor yazdır
+                if (choice == 1) {
                   try {
                     await printDailyReport(context);
                     _snack(context, 'Rapport envoyé à l\'imprimante.');
                   } catch (e) {
                     _snack(context, 'Erreur d\'impression: $e');
                   }
-                } else if (choice == 2) { // Her şeyi sil
+                } else if (choice == 2) {
                   app.clearOrders();
                 }
               },
@@ -1487,16 +1476,15 @@ class OrdersPage extends StatelessWidget {
               final who = o.customer.isEmpty ? '' : ' — ${o.customer}';
               return ListTile(
                 leading: const Icon(Icons.receipt),
-                title: Text('Commande$who • ${o.lines.length} article(s) • ${_money(o.total)}'), // YAMA 4.4
+                title: Text('Commande$who • ${o.lines.length} article(s) • ${_money(o.total)}'),
                 subtitle: Text('Prêt à ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}'),
                 trailing: IconButton(
                   icon: const Icon(Icons.print_outlined),
                   onPressed: () async {
                     try {
-                      await printOrderAndroid(o, context); // YAMA 2.3: context eklendi
+                      await printOrderAndroid(o, context);
                       _snack(context, 'Ticket envoyé à l\'imprimante.');
                     } catch (e) {
-                      // YAMA 6
                       _snack(context, 'Erreur d\'impression : $e. L\'IP/port et le réseau Wi-Fi sont-ils corrects ?');
                     }
                   },
@@ -1533,7 +1521,7 @@ class OrdersPage extends StatelessWidget {
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
                                         Text('• ${it.label}'),
-                                        Text(_money(it.price)), // YAMA 4.4
+                                        Text(_money(it.price)),
                                       ],
                                     ),
                                 ],
@@ -1543,7 +1531,7 @@ class OrdersPage extends StatelessWidget {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold)),
-                                Text(_money(o.total), style: const TextStyle(fontWeight: FontWeight.bold)), // YAMA 4.4
+                                Text(_money(o.total), style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ],
@@ -1553,7 +1541,7 @@ class OrdersPage extends StatelessWidget {
                         TextButton(
                           onPressed: () async {
                             try {
-                              await printOrderAndroid(o, context); // YAMA 2.3: context eklendi
+                              await printOrderAndroid(o, context);
                               if (context.mounted) {
                                 Navigator.pop(context);
                                 _snack(context, 'Ticket envoyé à l\'imprimante.');
@@ -1581,9 +1569,8 @@ class OrdersPage extends StatelessWidget {
 /* =======================
     DİYALOGLAR & UTIL
     ======================= */
-// YAMA 1.3: PIN kontrolü hash ile yapılıyor
 Future<bool> _askPin(BuildContext context) async {
-  final app = AppScope.of(context); // Dialog öncesi state'i al
+  final app = AppScope.of(context);
   final ctrl = TextEditingController();
   final ok = await showDialog<bool>(
     context: context,
@@ -1700,15 +1687,18 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 String _two(int n) => n.toString().padLeft(2, '0');
 String _money(double v) => '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
 
-// YAMA 2.1: Dinamik genişlik ve satır sarmalama
+// YAMA 4: _rightLine köşe durumu düzeltmesi
 String _rightLine(String left, String right, {required int width}) {
   left  = left.replaceAll('\n', ' ');
   right = right.replaceAll('\n', ' ');
-  if (right.length > width) right = right.substring(0, width);
-  if (left.length + right.length >= width) {
-    left = left.substring(0, width - right.length - 1);
+  if (right.length >= width) {
+    return right.substring(0, width);
   }
-  return left + ' ' * (width - left.length - right.length) + right;
+  final space = width - right.length;
+  if (left.length >= space) {
+    left = left.substring(0, (space - 1).clamp(0, space));
+  }
+  return left + ' ' * (space - left.length) + right;
 }
 
 List<String> _wrapLeftRight(String left, String right, {required int width}) {
@@ -1742,7 +1732,6 @@ void _alignLeft(Socket s)   => _cmd(s, [27, 97, 0]);
 void _alignCenter(Socket s) => _cmd(s, [27, 97, 1]);
 void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
 
-// YAMA 2.2: Gelişmiş CP1252 karakter haritası
 void _writeCp1252(Socket socket, String text) {
   const map = {
     0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87,
@@ -1767,7 +1756,6 @@ void _writeCp1252(Socket socket, String text) {
   socket.add(out);
 }
 
-// YAMA 2.3: Yazdırma fonksiyonu dinamik genişlik kullanıyor
 Future<void> printOrderAndroid(SavedOrder o, BuildContext context) async {
   final app = AppScope.of(context);
   final cols = app.settings.paperCols;
@@ -1791,7 +1779,8 @@ Future<void> printOrderAndroid(SavedOrder o, BuildContext context) async {
     }
 
     _boldOn(socket); _size(socket, 1);
-    _writeCp1252(socket, 'Pret a: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}\n');
+    // YAMA 3: Dil düzeltmesi
+    _writeCp1252(socket, 'Prêt à: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}\n');
     _size(socket, 0); _boldOff(socket);
 
     _alignLeft(socket);
@@ -1830,7 +1819,6 @@ Future<void> printOrderAndroid(SavedOrder o, BuildContext context) async {
   }
 }
 
-// YAMA 7: Gün sonu raporu yazdırma
 Future<void> printDailyReport(BuildContext context) async {
   final app = AppScope.of(context);
   final orders = app.orders;
@@ -1857,7 +1845,7 @@ Future<void> printDailyReport(BuildContext context) async {
 
 
 /* =======================
-    JSON KALICILIK YARDIMCILARI (YAMA 3.1)
+    JSON KALICILIK YARDIMCILARI
     ======================= */
 extension ProductJson on Product {
   Map<String, dynamic> toJson() => {
@@ -1867,7 +1855,7 @@ extension ProductJson on Product {
   };
   static Product fromJson(Map<String, dynamic> j) => Product(
     name: j['name'] ?? '',
-    groups: (j['groups'] as List? ?? []).map((x) => OptionGroupJson.fromJson(x)).toList(),
+    groups: (j['groups'] as List? ?? []).map((x) => OptionGroupJson.fromJson(x as Map<String, dynamic>)).toList(),
     prepMinutes: j['prepMinutes'],
   );
 }
@@ -1887,7 +1875,7 @@ extension OptionGroupJson on OptionGroup {
     multiple: j['multiple'] ?? false,
     minSelect: j['minSelect'] ?? 0,
     maxSelect: j['maxSelect'] ?? 1,
-    items: (j['items'] as List? ?? []).map((x) => OptionItemJson.fromJson(x)).toList(),
+    items: (j['items'] as List? ?? []).map((x) => OptionItemJson.fromJson(x as Map<String, dynamic>)).toList(),
   );
 }
 
@@ -1904,9 +1892,9 @@ extension CartLineJson on CartLine {
     'qty': qty,
   };
   static CartLine fromJson(Map<String, dynamic> j) => CartLine(
-    product: ProductJson.fromJson(j['product']),
+    product: ProductJson.fromJson(j['product'] as Map<String, dynamic>),
     picked: (j['picked'] as Map<String, dynamic>? ?? {})
-      .map((k, v) => MapEntry(k, (v as List).map((x)=>OptionItemJson.fromJson(x)).toList())),
+      .map((k, v) => MapEntry(k, (v as List).map((x)=>OptionItemJson.fromJson(x as Map<String, dynamic>)).toList())),
     qty: (j['qty'] ?? 1) as int,
   );
 }
@@ -1924,12 +1912,12 @@ extension SavedOrderJson on SavedOrder {
     createdAt: DateTime.fromMillisecondsSinceEpoch(j['createdAt']),
     readyAt: DateTime.fromMillisecondsSinceEpoch(j['readyAt']),
     customer: j['customer'] ?? '',
-    lines: (j['lines'] as List? ?? []).map((x)=>CartLineJson.fromJson(x)).toList(),
+    lines: (j['lines'] as List? ?? []).map((x)=>CartLineJson.fromJson(x as Map<String, dynamic>)).toList(),
   );
 }
 
 /* =======================
-    AYARLAR SAYFASI (YAMA 1.4)
+    AYARLAR SAYFASI
     ======================= */
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -1949,13 +1937,23 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    // YAMA A: initState yerine didChangeDependencies kullanmak daha güvenli
+    // ancak bu durumda state'i bir değişkende tutmak gerekir.
+    // Şimdilik initState'te bırakıyoruz, çünkü anlık değerleri alıyor.
+    // Daha karmaşık senaryolar için didChangeDependencies tercih edilir.
+    NetworkInfo().getWifiName().then((name) {
+      if (mounted) setState(() => wifiName = name?.replaceAll('"', ''));
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // YAMA A: State'i InheritedWidget'tan burada doldurmak en iyi pratiktir.
     final app = AppScope.of(context);
     ipCtrl.text   = app.settings.printerIp;
     portCtrl.text = app.settings.printerPort.toString();
     colsCtrl.text = app.settings.paperCols.toString();
-    NetworkInfo().getWifiName().then((name) {
-      if (mounted) setState(() => wifiName = name?.replaceAll('"', ''));
-    });
   }
 
   @override
