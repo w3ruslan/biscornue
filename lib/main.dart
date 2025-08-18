@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
-import 'package:flutter/material.dart'; // HATA GİDERİLDİ: Eksik olan temel Flutter paketi eklendi.
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
@@ -1433,6 +1433,7 @@ class OrdersPage extends StatelessWidget {
             TextButton.icon(
               onPressed: () async {
                 final pinOk = await _askPin(context); if (!pinOk) return;
+                if (!context.mounted) return;
                 final choice = await showDialog<int>(
                   context: context,
                   builder: (_) => AlertDialog(
@@ -1445,14 +1446,18 @@ class OrdersPage extends StatelessWidget {
                     ],
                   ),
                 );
-                if (choice == 1) {
+                if (choice == 1) { // Rapor yazdır
                   try {
                     await printDailyReport(context);
+                    // YAMA 1.D: context.mounted kontrolü eklendi
+                    if (!context.mounted) return;
                     _snack(context, 'Rapport envoyé à l\'imprimante.');
                   } catch (e) {
-                    _snack(context, 'Erreur d\'impression: $e');
+                    if (context.mounted) {
+                      _snack(context, 'Erreur d\'impression: $e');
+                    }
                   }
-                } else if (choice == 2) {
+                } else if (choice == 2) { // Her şeyi sil
                   app.clearOrders();
                 }
               },
@@ -1479,9 +1484,13 @@ class OrdersPage extends StatelessWidget {
                   onPressed: () async {
                     try {
                       await printOrderAndroid(o, context);
+                      // YAMA 1.C: context.mounted kontrolü eklendi
+                      if (!context.mounted) return;
                       _snack(context, 'Ticket envoyé à l\'imprimante.');
                     } catch (e) {
-                      _snack(context, 'Erreur d\'impression : $e. L\'IP/port et le réseau Wi-Fi sont-ils corrects ?');
+                      if (context.mounted) {
+                        _snack(context, 'Erreur d\'impression : $e. L\'IP/port et le réseau Wi-Fi sont-ils corrects ?');
+                      }
                     }
                   },
                   tooltip: 'Imprimer',
@@ -1543,7 +1552,9 @@ class OrdersPage extends StatelessWidget {
                                 _snack(context, 'Ticket envoyé à l\'imprimante.');
                               }
                             } catch (e) {
-                               _snack(context, 'Erreur d\'impression : $e');
+                               if (context.mounted) {
+                                _snack(context, 'Erreur d\'impression : $e');
+                               }
                             }
                           },
                           child: const Text('Imprimer'),
@@ -2000,7 +2011,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 onPressed: testing ? null : () async {
                   setState(() => testing = true);
                   final ok = await app.testPrinterConnectivity();
-                  if (!mounted) return;
+                  // YAMA 1.A: context.mounted kontrolü eklendi
+                  if (!context.mounted) return;
                   setState(() => testing = false);
                   _snack(context, ok ? 'Connexion OK' : 'Connexion échouée');
                 },
@@ -2024,11 +2036,15 @@ class _SettingsPageState extends State<SettingsPage> {
                       ],
                     );
                     await printOrderAndroid(demo, context);
+                    // YAMA 1.B: context.mounted kontrolü eklendi
+                    if (!context.mounted) return;
                     _snack(context, 'Ticket de test envoyé.');
                   } catch (e) {
-                    _snack(context, 'Erreur: $e');
+                    if (context.mounted) {
+                      _snack(context, 'Erreur: $e');
+                    }
                   } finally {
-                    if (mounted) setState(() => printing = false);
+                    if (context.mounted) setState(() => printing = false);
                   }
                 },
                 icon: const Icon(Icons.print),
@@ -2047,6 +2063,7 @@ class _SettingsPageState extends State<SettingsPage> {
               final p = pinCtrl.text.trim();
               if (p.length < 4 || p.length > 8) { _snack(context, 'Longueur du PIN invalide.'); return; }
               await app.setAdminPin(p);
+              if (!context.mounted) return;
               _snack(context, 'PIN mis à jour.');
               pinCtrl.clear();
             },
