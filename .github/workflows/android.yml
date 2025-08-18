@@ -1,10 +1,7 @@
 name: Android APK (arm64 debug)
 
 on:
-  # Bu workflow'u manuel olarak çalıştırmanı sağlar
   workflow_dispatch:
-  
-  # "main" branch'ine her kod gönderildiğinde otomatik çalışır
   push:
     branches: [ main ]
 
@@ -12,100 +9,96 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1. Adım: Proje kodunu indirir
-      - uses: actions/checkout@v4
+      - name: Proje Dosyalarini Indir
+        uses: actions/checkout@v4
 
-      # 2. Adım: Android derlemesi için gerekli Java ortamını kurar
+      - name: Flutter Kurulumu
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      # 3. Adım: Flutter SDK'sını kurar
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
+      - name: Android Projesini Olustur
+        run: flutter create . --platforms=android --org com.w3ruslan --project-name surplace_pos --overwrite
 
-      # ===============================================================
-      # YENİ TEŞHİS ADIMLARI BURADA BAŞLIYOR
-      # ===============================================================
-      
-      # 4. Adım (YENİ): Araç zinciri bilgilerini göster
-      - name: Show toolchain info
+      - name: Gradle Adreslerini Garanti Altina Al (settings.gradle + build.gradle)
+        shell: bash
         run: |
-          which flutter || true
-          which dart || true
-          flutter --version
-          dart --version
-          echo "PATH=$PATH"
-
-      # 5. Adım (YENİ): pubspec.yaml dosyasının içeriğini göster
-      - name: Show pubspec.yaml
-        run: |
-          echo "----- pubspec.yaml -----"
-          cat pubspec.yaml
-
-      # 6. Adım (YENİ): main.dart dosyasının başını ve import'ları kontrol et
-      - name: Show main.dart head + verify import
-        run: |
-          echo "----- lib/main.dart (1..80) -----"
-          nl -ba lib/main.dart | sed -n '1,80p'
-          echo "----- verify import -----"
-          if ! grep -q "import 'package:flutter/material.dart';" lib/main.dart; then
-            echo "::error title=Missing Flutter import::lib/main.dart başında material importu yok!"
-            exit 1
+          set -euo pipefail
+          # settings.gradle: pluginManagement + dependencyResolutionManagement
+          cat > android/settings.gradle <<'EOF'
+pluginManagement {
+  repositories {
+    google()
+    mavenCentral()
+    gradlePluginPortal()
+  }
+}
+dependencyResolutionManagement {
+  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+  repositories {
+    google()
+    mavenCentral()
+  }
+}
+rootProject.name = "surplace_pos"
+include(":app")
+EOF
+          # project-level build.gradle: allprojects { repositories { ... } }
+          if ! grep -q "allprojects" android/build.gradle; then
+            cat >> android/build.gradle <<'EOF'
+allprojects {
+  repositories {
+    google()
+    mavenCentral()
+  }
+}
+EOF
           fi
-          echo "Import OK"
 
-      # 7. Adım (YENİ): Hata alınan satırların etrafındaki kodu göster
-      - name: Show around reported lines
+      - name: Kotlin Surumunu Hizala ve Tek Surumu Zorla
+        shell: bash
         run: |
-          for L in 1677 1759 1922 1925; do
-            echo "----- lib/main.dart (satır $L etrafı) -----"
-            nl -ba lib/main.dart | sed -n "$((L-20)),$((L+20))p" || true
-          done
-
-      # ===============================================================
-      # TEŞHİS ADIMLARI BİTTİ
-      # ===============================================================
-
-      # 8. Adım: Eğer reponda yoksa, Android proje dosyalarını oluşturur
-      - name: Create Android folder if missing
-        run: |
-          if [ ! -d android ]; then
-            flutter create . --platforms=android --org com.w3ruslan --project-name surplace_pos
-          else
-            echo "android/ already exists; skipping flutter create"
+          set -euo pipefail
+          FILE=android/build.gradle
+          # Eski şablonlarda varsa ext.kotlin_version'ı 1.9.24'e çek
+          if grep -q "ext.kotlin_version" "$FILE"; then
+            sed -i "s/ext.kotlin_version *= *'.*'/ext.kotlin_version = '1.9.24'/" "$FILE"
           fi
-          
-      # 9. Adım: Yazıcıya bağlanmak için gerekli internet iznini otomatik ekler
-      - name: Add INTERNET permission
+          # Bütün modüllerde aynı stdlib sürümünü zorla (duplicate class'ı engeller)
+          if ! grep -q "resolutionStrategy" "$FILE"; then
+            cat >> android/build.gradle <<'EOF'
+allprojects {
+  configurations.all {
+    resolutionStrategy {
+      force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
+      force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'
+    }
+  }
+}
+EOF
+          fi
+
+      - name: INTERNET Iznini Ekle
+        shell: bash
         run: |
+          set -euo pipefail
           MANIFEST=android/app/src/main/AndroidManifest.xml
-          grep -q 'android.permission.INTERNET' "$MANIFEST" || \
-            sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET" />\n    <application#' "$MANIFEST"
-            
-      # 10. Adım: Projenin bağımlılıklarını (paketlerini) indirir
-      - name: Get dependencies
-        run: flutter pub get
-      
-      # 11. Adım: Kodu derlemeden önce olası hataları kontrol eder
-      - name: Analyze code
-        run: flutter analyze
-      
-      # 12. Adım: Önceki derlemelerden kalan artıkları temizler
-      - name: Clean project
-        run: flutter clean
-      
-      # 13. Adım: APK dosyasını oluşturur
-      - name: Build APK (verbose)
-        run: flutter build apk --debug --target-platform=android-arm64 --no-shrink --verbose
+          sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET" />\    <application#' "$MANIFEST"
 
-      # 14. Adım: Oluşturulan APK dosyasını indirilebilmesi için kaydeder
-      - name: Upload APK artifact
+      - name: Bagimliliklari Yukle
+        run: flutter pub get
+
+      - name: APK Olustur (arm64 debug)
+        run: flutter build apk --debug --target-platform=android-arm64 --no-shrink
+
+      - name: APK Dosyasini Yukle
         uses: actions/upload-artifact@v4
         with:
           name: apk-debug
