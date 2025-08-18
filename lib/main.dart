@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
-import 'package.flutter/material.dart';
-import 'package.flutter/services.dart';
+import 'package:flutter/material.dart'; // HATA GİDERİLDİ: Eksik olan temel Flutter paketi eklendi.
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 
