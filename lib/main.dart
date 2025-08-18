@@ -183,7 +183,6 @@ class AppState extends ChangeNotifier {
 
   Future<void> setPrinterIp(String ip) async { settings.printerIp = ip.trim(); await _saveSettings(); notifyListeners(); }
   Future<void> setPrinterPort(int p) async { settings.printerPort = p; await _saveSettings(); notifyListeners(); }
-  // YAMA 1: clamp -> int atama hatası düzeltildi
   Future<void> setPaperCols(int c) async { settings.paperCols = c.clamp(20, 64).toInt(); await _saveSettings(); notifyListeners(); }
   Future<void> setAdminPin(String newPin) async {
     settings.pinHash = _fnv64(newPin);
@@ -203,7 +202,6 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // YAMA 2: JSON decode cast'leri sağlamlaştırıldı
   Future<void> _loadProductsFromPrefs(SharedPreferences sp) async {
     final s = sp.getString('productsJson');
     if (s == null) return;
@@ -244,7 +242,6 @@ class AppState extends ChangeNotifier {
   void addProduct(Product p) { products.add(p); _saveProductsToPrefs(); notifyListeners(); }
   void replaceProductAt(int i, Product p) { products[i] = p; _saveProductsToPrefs(); notifyListeners(); }
 
-  // YAMA 1: clamp -> int atama hatası düzeltildi
   void addLineToCart(Product p, Map<String, List<OptionItem>> picked, {int qty = 1}) {
     final deep = { for (final e in picked.entries) e.key: List<OptionItem>.from(e.value) };
     cart.add(CartLine(product: p, picked: deep, qty: qty.clamp(1, 999).toInt()));
@@ -1285,7 +1282,6 @@ class CartPage extends StatelessWidget {
             const Text('Panier', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Spacer(),
             TextButton.icon(
-              // YAMA C: Sepeti boşaltma onayı
               onPressed: () async {
                 final ok = await showDialog<bool>(
                   context: context,
@@ -1687,7 +1683,6 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 String _two(int n) => n.toString().padLeft(2, '0');
 String _money(double v) => '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
 
-// YAMA 4: _rightLine köşe durumu düzeltmesi
 String _rightLine(String left, String right, {required int width}) {
   left  = left.replaceAll('\n', ' ');
   right = right.replaceAll('\n', ' ');
@@ -1779,7 +1774,6 @@ Future<void> printOrderAndroid(SavedOrder o, BuildContext context) async {
     }
 
     _boldOn(socket); _size(socket, 1);
-    // YAMA 3: Dil düzeltmesi
     _writeCp1252(socket, 'Prêt à: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}\n');
     _size(socket, 0); _boldOff(socket);
 
@@ -1937,10 +1931,6 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
-    // YAMA A: initState yerine didChangeDependencies kullanmak daha güvenli
-    // ancak bu durumda state'i bir değişkende tutmak gerekir.
-    // Şimdilik initState'te bırakıyoruz, çünkü anlık değerleri alıyor.
-    // Daha karmaşık senaryolar için didChangeDependencies tercih edilir.
     NetworkInfo().getWifiName().then((name) {
       if (mounted) setState(() => wifiName = name?.replaceAll('"', ''));
     });
@@ -1949,7 +1939,6 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // YAMA A: State'i InheritedWidget'tan burada doldurmak en iyi pratiktir.
     final app = AppScope.of(context);
     ipCtrl.text   = app.settings.printerIp;
     portCtrl.text = app.settings.printerPort.toString();
