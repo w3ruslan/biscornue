@@ -490,6 +490,7 @@ class _ProductCard extends StatelessWidget {
                 onPressed: () async {
                   final ok = await _askPin(context);
                   if (!ok) return;
+                  if (!context.mounted) return;
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => CreateProductPage(
