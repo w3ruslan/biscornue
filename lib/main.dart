@@ -1,12 +1,11 @@
 import 'dart:io';
-import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // FilteringTextInputFormatter için eklendi
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:network_info_plus/network_info_plus.dart';
 
 /* =======================
-    Sabitler
-    ======================= */
+    Sabitler
+    ======================= */
 // LÜTFEN BU IP ADRESİNİ KENDİ YAZICINIZIN IP ADRESİYLE DEĞİŞTİRİN
 const String PRINTER_IP = '192.168.1.1'; // <-- Epson yazıcının IP'si
 const int    PRINTER_PORT = 9100;        // Genelde 9100 (RAW)
@@ -14,8 +13,8 @@ const int    PRINTER_PORT = 9100;        // Genelde 9100 (RAW)
 const String _ADMIN_PIN = '6538';
 
 /* =======================
-    ENTRY
-    ======================= */
+    ENTRY
+    ======================= */
 void main() {
   final appState = AppState();
   appState.loadSettings(); // Ayarları yükle
@@ -36,13 +35,17 @@ class App extends StatelessWidget {
 }
 
 /* =======================
-    MODELLER & STATE
-    ======================= */
+    MODELLER & STATE
+    ======================= */
 class Product {
   String name;
   final List<OptionGroup> groups;
-  Product({required this.name, List<OptionGroup>? groups})
+  // İYİLEŞTİRME: Ürüne özel hazırlık süresi eklendi (opsiyonel).
+  final int? prepMinutes; 
+
+  Product({required this.name, List<OptionGroup>? groups, this.prepMinutes})
       : groups = groups ?? [];
+
   double priceForSelection(Map<String, List<OptionItem>> picked) {
     double total = 0;
     for (final g in groups) {
@@ -148,8 +151,16 @@ class AppState extends ChangeNotifier {
       picked: { for (final e in l.picked.entries) e.key: List<OptionItem>.from(e.value) },
     )).toList();
 
+    // İYİLEŞTİRME: Siparişteki en uzun hazırlık süresini bul ve onu kullan.
+    int maxPrep = prepMinutes; // Global değeri varsayılan al
+    for (final line in cart) {
+      if (line.product.prepMinutes != null && line.product.prepMinutes! > maxPrep) {
+        maxPrep = line.product.prepMinutes!;
+      }
+    }
+
     final now   = DateTime.now();
-    final ready = now.add(Duration(minutes: prepMinutes));
+    final ready = now.add(Duration(minutes: maxPrep));
 
     orders.add(SavedOrder(
       id: now.millisecondsSinceEpoch.toString(),
@@ -176,8 +187,8 @@ class AppScope extends InheritedNotifier<AppState> {
 }
 
 /* =======================
-    HOME (4 sekme)
-    ======================= */
+    HOME (4 sekme)
+    ======================= */
 class Home extends StatefulWidget {
   const Home({super.key});
   @override
@@ -197,15 +208,15 @@ class _HomeState extends State<Home> {
     final app = AppScope.of(context);
     if (app.products.isEmpty) {
       final products = <Product>[
-        Product(name: 'Sandwich', groups: [
+        Product(name: 'Sandwich', prepMinutes: 7, groups: [
           OptionGroup(
             id: 'type_sand', title: 'Sandwich', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
-              OptionItem(id: 'kebab',     label: 'Kebab',        price: 8.90),
-              OptionItem(id: 'poulet',    label: 'Poulet',       price: 8.90),
-              OptionItem(id: 'steak',     label: 'Steak hache',  price: 8.90),
-              OptionItem(id: 'vege',      label: 'Vegetarien',   price: 8.90),
-              OptionItem(id: 'berlineur', label: 'Berlineur',    price: 10.90),
+              OptionItem(id: 'kebab',     label: 'Kebab',       price: 8.90),
+              OptionItem(id: 'poulet',    label: 'Poulet',      price: 8.90),
+              OptionItem(id: 'steak',     label: 'Steak hache', price: 8.90),
+              OptionItem(id: 'vege',      label: 'Vegetarien',  price: 8.90),
+              OptionItem(id: 'berlineur', label: 'Berlineur',   price: 10.90),
             ],
           ),
           OptionGroup(
@@ -232,38 +243,38 @@ class _HomeState extends State<Home> {
           OptionGroup(
             id: 'supp', title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3,
             items: [
-              OptionItem(id: 'cheddar',        label: 'Cheddar',                      price: 1.50),
-              OptionItem(id: 'mozzarella',     label: 'Mozzarella rapee',             price: 1.50),
-              OptionItem(id: 'feta',           label: 'Feta',                         price: 1.50),
-              OptionItem(id: 'porc',           label: 'Poitrine de porc fume',        price: 1.50),
-              OptionItem(id: 'chevre',         label: 'Chevre',                       price: 1.50),
-              OptionItem(id: 'legumes',        label: 'Legumes grilles',              price: 1.50),
-              OptionItem(id: 'oeuf',           label: 'Oeuf',                         price: 1.50),
-              OptionItem(id: 'double_cheddar', label: 'Double Cheddar',               price: 3.00),
-              OptionItem(id: 'double_mozza',   label: 'Double Mozzarella rapee',      price: 3.00),
-              OptionItem(id: 'double_porc',    label: 'Double Poitrine de porc fume', price: 3.00),
+              OptionItem(id: 'cheddar',        label: 'Cheddar',                       price: 1.50),
+              OptionItem(id: 'mozzarella',     label: 'Mozzarella rapee',              price: 1.50),
+              OptionItem(id: 'feta',           label: 'Feta',                          price: 1.50),
+              OptionItem(id: 'porc',           label: 'Poitrine de porc fume',         price: 1.50),
+              OptionItem(id: 'chevre',         label: 'Chevre',                        price: 1.50),
+              OptionItem(id: 'legumes',        label: 'Legumes grilles',               price: 1.50),
+              OptionItem(id: 'oeuf',           label: 'Oeuf',                          price: 1.50),
+              OptionItem(id: 'double_cheddar', label: 'Double Cheddar',                price: 3.00),
+              OptionItem(id: 'double_mozza',   label: 'Double Mozzarella rapee',       price: 3.00),
+              OptionItem(id: 'double_porc',    label: 'Double Poitrine de porc fume',  price: 3.00),
             ],
           ),
           OptionGroup(
             id: 'sauces', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
             items: [
-              OptionItem(id: 'sans_sauce', label: 'Sans sauce',            price: 0.00),
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison',  price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',               price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',            price: 0.00),
-              OptionItem(id: 'algerienne', label: 'Algerienne',            price: 0.00),
-              OptionItem(id: 'bbq',        label: 'Barbecue',              price: 0.00),
-              OptionItem(id: 'bigburger',  label: 'Big Burger',            price: 0.00),
-              OptionItem(id: 'harissa',    label: 'Harissa',               price: 0.00),
+              OptionItem(id: 'sans_sauce', label: 'Sans sauce',           price: 0.00),
+              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
+              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
+              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
+              OptionItem(id: 'algerienne', label: 'Algerienne',           price: 0.00),
+              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
+              OptionItem(id: 'bigburger',  label: 'Big Burger',           price: 0.00),
+              OptionItem(id: 'harissa',    label: 'Harissa',              price: 0.00),
             ],
           ),
           OptionGroup(
             id: 'formule', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
-              OptionItem(id: 'seul',    label: 'Seul',                     price: 0.00),
-              OptionItem(id: 'frites',  label: 'Avec frites',              price: 1.00),
-              OptionItem(id: 'boisson', label: 'Avec boisson',             price: 1.00),
-              OptionItem(id: 'menu',    label: 'Avec frites et boisson',   price: 2.00),
+              OptionItem(id: 'seul',    label: 'Seul',                    price: 0.00),
+              OptionItem(id: 'frites',  label: 'Avec frites',             price: 1.00),
+              OptionItem(id: 'boisson', label: 'Avec boisson',            price: 1.00),
+              OptionItem(id: 'menu',    label: 'Avec frites et boisson',  price: 2.00),
             ],
           ),
         ]),
@@ -278,9 +289,9 @@ class _HomeState extends State<Home> {
           OptionGroup(
             id: 'viande_tacos', title: 'Viande', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
-              OptionItem(id: 'kebab',  label: 'Kebab',  price: 0.00),
-              OptionItem(id: 'poulet', label: 'Poulet', price: 0.00),
-              OptionItem(id: 'steak',  label: 'Steak',  price: 0.00),
+              OptionItem(id: 'kebab',  label: 'Kebab',      price: 0.00),
+              OptionItem(id: 'poulet', label: 'Poulet',     price: 0.00),
+              OptionItem(id: 'steak',  label: 'Steak',      price: 0.00),
               OptionItem(id: 'vege',   label: 'Vegetarien', price: 0.00),
             ],
           ),
@@ -311,14 +322,14 @@ class _HomeState extends State<Home> {
             ],
           ),
         ]),
-        Product(name: 'Burgers', groups: [
+        Product(name: 'Burgers', prepMinutes: 10, groups: [
           OptionGroup(
             id: 'type_burger', title: 'Burger', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
-              OptionItem(id: 'classic',  label: 'Classic',         price: 7.90),
-              OptionItem(id: 'double',   label: 'Double cheese',   price: 9.90),
-              OptionItem(id: 'chicken',  label: 'Chicken',         price: 8.50),
-              OptionItem(id: 'veggie',   label: 'Veggie',          price: 8.50),
+              OptionItem(id: 'classic',  label: 'Classic',       price: 7.90),
+              OptionItem(id: 'double',   label: 'Double cheese', price: 9.90),
+              OptionItem(id: 'chicken',  label: 'Chicken',       price: 8.50),
+              OptionItem(id: 'veggie',   label: 'Veggie',        price: 8.50),
             ],
           ),
           OptionGroup(
@@ -352,9 +363,9 @@ class _HomeState extends State<Home> {
           OptionGroup(
             id: 'sauce_box', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
             items: [
-              OptionItem(id: 'ketchup', label: 'Ketchup',   price: 0.00),
-              OptionItem(id: 'mayo',    label: 'Mayonnaise',price: 0.00),
-              OptionItem(id: 'bbq',     label: 'Barbecue',  price: 0.00),
+              OptionItem(id: 'ketchup', label: 'Ketchup',    price: 0.00),
+              OptionItem(id: 'mayo',    label: 'Mayonnaise', price: 0.00),
+              OptionItem(id: 'bbq',     label: 'Barbecue',   price: 0.00),
               OptionItem(id: 'blanche', label: 'Sauce blanche maison', price: 0.00),
             ],
           ),
@@ -377,9 +388,9 @@ class _HomeState extends State<Home> {
           OptionGroup(
             id: 'crudites_enfant', title: 'Crudites', multiple: true, minSelect: 0, maxSelect: 3,
             items: [
-              OptionItem(id: 'avec',          label: 'Avec crudites',  price: 0.00),
-              OptionItem(id: 'sans_salade',   label: 'Sans salade',    price: 0.00),
-              OptionItem(id: 'sans_cornichon',label: 'Sans cornichon', price: 0.00),
+              OptionItem(id: 'avec',           label: 'Avec crudites',  price: 0.00),
+              OptionItem(id: 'sans_salade',    label: 'Sans salade',    price: 0.00),
+              OptionItem(id: 'sans_cornichon', label: 'Sans cornichon', price: 0.00),
             ],
           ),
           OptionGroup(
@@ -485,8 +496,8 @@ class _HomeState extends State<Home> {
 }
 
 /* =======================
-    PAGE 1 : PRODUITS
-    ======================= */
+    PAGE 1 : PRODUITS
+    ======================= */
 class ProductsPage extends StatelessWidget {
   const ProductsPage({super.key});
 
@@ -609,8 +620,8 @@ class _ProductCard extends StatelessWidget {
 }
 
 /* =======================
-    PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
-    ======================= */
+    PAGE 2 : CRÉER + DÜZENLE
+    ======================= */
 class CreateProductPage extends StatefulWidget {
   final void Function(int) onGoToTab;
   final int? editIndex;
@@ -621,6 +632,8 @@ class CreateProductPage extends StatefulWidget {
 
 class _CreateProductPageState extends State<CreateProductPage> {
   final TextEditingController nameCtrl = TextEditingController(text: 'Sandwich');
+  // İYİLEŞTİRME: Ürüne özel hazırlık süresi için controller eklendi
+  final TextEditingController productPrepCtrl = TextEditingController();
   final List<OptionGroup> editingGroups = [];
   int? editingIndex;
   final TextEditingController delayCtrl = TextEditingController();
@@ -641,6 +654,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
     if (idx < 0 || idx >= app.products.length) return;
     final p = app.products[idx];
     nameCtrl.text = p.name;
+    productPrepCtrl.text = p.prepMinutes?.toString() ?? '';
     editingGroups..clear()..addAll(p.groups.map(_copyGroup));
     setState(() => editingIndex = idx);
   }
@@ -658,21 +672,33 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
   void saveProduct() {
     final app = AppScope.of(context);
-    if (nameCtrl.text.trim().isEmpty) { _snack(context, 'Nom du produit requis.'); return; }
+    if (nameCtrl.text.trim().isEmpty) { _snack(context, 'Le nom du produit est requis.'); return; }
     for (final g in editingGroups) {
-      if (g.title.trim().isEmpty) { _snack(context, 'Titre du groupe manquant.'); return; }
+      if (g.title.trim().isEmpty) { _snack(context, 'Le titre du groupe est manquant.'); return; }
       if (g.items.isEmpty) { _snack(context, 'Ajoutez au moins une option dans "${g.title}".'); return; }
       if (g.minSelect < 0 || g.maxSelect < 1 || g.minSelect > g.maxSelect) {
         _snack(context, 'Règles min/max invalides dans "${g.title}".'); return;
       }
       if (!g.multiple && (g.minSelect != 1 || g.maxSelect != 1)) {
-        _snack(context, 'Choix unique doit avoir min=1 et max=1 (${g.title}).'); return;
+        _snack(context, 'Un choix unique doit avoir min=1 et max=1 (${g.title}).'); return;
       }
     }
-    final p = Product(name: nameCtrl.text.trim(), groups: List.of(editingGroups));
+    
+    final int? productPrep = int.tryParse(productPrepCtrl.text.trim());
+
+    final p = Product(
+      name: nameCtrl.text.trim(), 
+      groups: List.of(editingGroups),
+      prepMinutes: productPrep,
+    );
+
     if (editingIndex == null) { app.addProduct(p); _snack(context, 'Produit créé.'); }
     else { app.replaceProductAt(editingIndex!, p); _snack(context, 'Produit mis à jour.'); }
-    nameCtrl.text = ''; editingGroups.clear(); setState(() => editingIndex = null);
+    
+    nameCtrl.clear();
+    productPrepCtrl.clear();
+    editingGroups.clear(); 
+    setState(() => editingIndex = null);
 
     if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
   }
@@ -693,7 +719,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
           const Spacer(),
           TextButton.icon(
             onPressed: () {
-              nameCtrl.text = ''; editingGroups.clear(); setState(() => editingIndex = null);
+              nameCtrl.clear();
+              productPrepCtrl.clear();
+              editingGroups.clear(); 
+              setState(() => editingIndex = null);
               if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
             },
             icon: const Icon(Icons.close), label: const Text('Annuler'),
@@ -712,9 +741,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 Expanded(
                   child: TextField(
                     controller: delayCtrl,
+                    // İYİLEŞTİRME: Sadece rakam girişi zorunlu kılındı.
                     keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     decoration: const InputDecoration(
-                      labelText: 'Délai de préparation (minutes)',
+                      labelText: 'Délai de préparation global (minutes)',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -728,7 +759,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                       return;
                     }
                     app.setPrepMinutes(m);
-                    _snack(context, 'Délai enregistré: $m min');
+                    _snack(context, 'Délai enregistré : $m min.');
                   },
                   child: const Text('Enregistrer'),
                 ),
@@ -759,9 +790,36 @@ class _CreateProductPageState extends State<CreateProductPage> {
           ),
           const SizedBox(height: 16), const Divider(), const SizedBox(height: 12),
         ],
-
-        TextField(controller: nameCtrl,
-          decoration: const InputDecoration(labelText: 'Nom du produit', border: OutlineInputBorder())),
+        
+        // Ürün adı ve hazırlık süresi yan yana
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Nom du produit',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 150,
+              child: TextField(
+                controller: productPrepCtrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: 'Délai (min)',
+                  hintText: 'Optionnel',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 12),
         Row(children: [
           FilledButton.icon(onPressed: addGroup, icon: const Icon(Icons.add), label: const Text('Ajouter un groupe')),
@@ -810,16 +868,29 @@ class _GroupEditorState extends State<_GroupEditor> {
     maxCtrl.text = widget.group.maxSelect.toString();
   }
 
+  // DÜZELTME: _mode (tek/çoklu seçim) bug'ı giderildi.
+  int get _mode => widget.group.multiple ? 1 : 0;
+  set _mode(int v) {
+    // Seçimi HEMEN uygula
+    widget.group.multiple = (v == 1);
+    // Tek seçime geçiliyorsa min/max = 1/1
+    if (v == 0) {
+      minCtrl.text = '1';
+      maxCtrl.text = '1';
+    }
+    // multiple değerini apply() tekrar bozmasın
+    apply();
+    setState(() {});
+  }
+
   void apply() {
     widget.group.title = titleCtrl.text.trim();
-    widget.group.multiple = _mode == 1;
+    // widget.group.multiple burada tekrar set edilmesin!
     widget.group.minSelect = int.tryParse(minCtrl.text) ?? 0;
     widget.group.maxSelect = int.tryParse(maxCtrl.text) ?? 1;
     widget.onChanged();
   }
-
-  int get _mode => widget.group.multiple ? 1 : 0;
-  set _mode(int v) { if (v == 0) { minCtrl.text = '1'; maxCtrl.text = '1'; } apply(); setState(() {}); }
+  // DÜZELTME SONU
 
   void addOption() {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
@@ -941,8 +1012,8 @@ class _OptionEditorState extends State<_OptionEditor> {
 }
 
 /* =======================
-    WIZARD (BUTONLAR İÇERİKTE, BİRAZ DAHA YUKARIDA)
-    ======================= */
+    WIZARD
+    ======================= */
 class OrderWizard extends StatefulWidget {
   final Product product;
   final Map<String, List<OptionItem>>? initialPicked;
@@ -1042,18 +1113,22 @@ class _OrderWizardState extends State<OrderWizard> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: isSummary
-                ? _Summary(product: widget.product, picked: picked, total: total)
-                : _GroupStep(
-                    group: groups[step],
-                    picked: picked,
-                    toggleSingle: _toggleSingle,
-                    toggleMulti: _toggleMulti,
-                  ),
+            // İYİLEŞTİRME: FAB'ların içeriği kapatmaması için alttan daha fazla boşluk bırakıldı.
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 96.0),
+              child: isSummary
+                  ? _Summary(product: widget.product, picked: picked, total: total)
+                  : _GroupStep(
+                      group: groups[step],
+                      picked: picked,
+                      toggleSingle: _toggleSingle,
+                      toggleMulti: _toggleMulti,
+                    ),
+            ),
           ),
           Positioned(
             left: 16,
-            bottom: 16 + MediaQuery.of(context).padding.bottom,
+            bottom: 24 + MediaQuery.of(context).padding.bottom,
             child: FloatingActionButton.large(
               heroTag: 'prevFab',
               onPressed: step == 0
@@ -1064,7 +1139,7 @@ class _OrderWizardState extends State<OrderWizard> {
           ),
           Positioned(
             right: 16,
-            bottom: 16 + MediaQuery.of(context).padding.bottom,
+            bottom: 24 + MediaQuery.of(context).padding.bottom,
             child: FloatingActionButton.large(
               heroTag: 'nextFab',
               onPressed: () {
@@ -1280,8 +1355,8 @@ class _Summary extends StatelessWidget {
 }
 
 /* =======================
-    PAGE 3 : PANIER
-    ======================= */
+    PAGE 3 : PANIER
+    ======================= */
 class CartPage extends StatelessWidget {
   const CartPage({super.key});
   @override
@@ -1340,7 +1415,7 @@ class CartPage extends StatelessWidget {
                   spacing: 4,
                   children: [
                     IconButton(
-                      tooltip: 'Düzenle',
+                      tooltip: 'Modifier',
                       icon: const Icon(Icons.edit_outlined),
                       onPressed: () async {
                         final result = await Navigator.push<Map<String, List<OptionItem>>>(
@@ -1356,13 +1431,14 @@ class CartPage extends StatelessWidget {
                         if (result != null) {
                           app.updateCartLineAt(i, result);
                           if (context.mounted) {
-                            _snack(context, 'Satır güncellendi.');
+                            // İYİLEŞTİRME: SnackBar metni Fransızcaya çevrildi.
+                            _snack(context, 'Ligne mise à jour.');
                           }
                         }
                       },
                     ),
                     IconButton(
-                      tooltip: 'Sil',
+                      tooltip: 'Supprimer',
                       icon: const Icon(Icons.delete_outline),
                       onPressed: () => app.removeCartLineAt(i),
                     ),
@@ -1404,8 +1480,8 @@ class CartPage extends StatelessWidget {
 }
 
 /* =======================
-    PAGE 4 : COMMANDES + YAZDIRMA
-    ======================= */
+    PAGE 4 : COMMANDES + YAZDIRMA
+    ======================= */
 class OrdersPage extends StatelessWidget {
   const OrdersPage({super.key});
   @override
@@ -1470,9 +1546,11 @@ class OrdersPage extends StatelessWidget {
                   onPressed: () async {
                     try {
                       await printOrderAndroid(o);
-                      _snack(context, 'Fiş yazıcıya gönderildi.');
+                      // İYİLEŞTİRME: SnackBar metni Fransızcaya çevrildi.
+                      _snack(context, 'Ticket envoyé à l\'imprimante.');
                     } catch (e) {
-                      _snack(context, 'Yazdırma hatası: $e');
+                      // İYİLEŞTİRME: SnackBar metni Fransızcaya çevrildi.
+                      _snack(context, 'Erreur d\'impression : $e');
                     }
                   },
                   tooltip: 'Imprimer',
@@ -1531,10 +1609,10 @@ class OrdersPage extends StatelessWidget {
                               await printOrderAndroid(o);
                               if (context.mounted) {
                                 Navigator.pop(context); // Diyalogu kapat
-                                _snack(context, 'Fiş yazıcıya gönderildi.');
+                                _snack(context, 'Ticket envoyé à l\'imprimante.');
                               }
                             } catch (e) {
-                               _snack(context, 'Yazdırma hatası: $e');
+                               _snack(context, 'Erreur d\'impression : $e');
                             }
                           },
                           child: const Text('Imprimer'),
@@ -1554,8 +1632,8 @@ class OrdersPage extends StatelessWidget {
 }
 
 /* =======================
-    DİYALOGLAR & UTIL
-    ======================= */
+    DİYALOGLAR & UTIL
+    ======================= */
 Future<bool> _askPin(BuildContext context) async {
   final ctrl = TextEditingController();
   final ok = await showDialog<bool>(
@@ -1573,7 +1651,8 @@ Future<bool> _askPin(BuildContext context) async {
     ),
   );
   if (ok != true) {
-    _snack(context, 'Code incorrect.');
+    // İYİLEŞTİRME: SnackBar metni Fransızcaya çevrildi.
+    _snack(context, 'Code PIN incorrect.');
   }
   return ok == true;
 }
@@ -1624,7 +1703,7 @@ Future<String?> _askCustomerName(BuildContext context) async {
   );
 }
 
-void _snack(BuildContext context, String msg, {int ms = 1200}) {
+void _snack(BuildContext context, String msg, {int ms = 1500}) {
   if (!context.mounted) return;
   final bottomInset = MediaQuery.of(context).padding.bottom;
   final bottomBar = kBottomNavigationBarHeight;
@@ -1648,9 +1727,6 @@ void _showWarn(BuildContext context, String msg) {
   _snack(context, msg);
 }
 
-/* =======================
-    Choisir butonu (kırılma yok)
-    ======================= */
 Widget choisirButton(VoidCallback onTap, BuildContext context) {
   final color = Theme.of(context).colorScheme;
   return Material(
@@ -1668,7 +1744,7 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 }
 
 // ==================================================
-// YENİ, PAKETSİZ YAZDIRMA YARDIMCILARI
+// YAZDIRMA YARDIMCILARI
 // ==================================================
 
 String _two(int n) => n.toString().padLeft(2, '0');
@@ -1679,8 +1755,8 @@ String _money(double v) =>
 String _rightLine(String left, String right, {int width = 32}) {
   left = left.replaceAll('\n', ' ');
   right = right.replaceAll('\n', ' ');
-  if (left.length + right.length > width) {
-    left = left.substring(0, width - right.length);
+  if (left.length + right.length >= width) {
+    left = left.substring(0, width - right.length - 1);
   }
   return left + ' ' * (width - left.length - right.length) + right;
 }
@@ -1693,91 +1769,129 @@ void _alignLeft(Socket s)   => _cmd(s, [27, 97, 0]);
 void _alignCenter(Socket s) => _cmd(s, [27, 97, 1]);
 void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
 
+// İYİLEŞTİRME: (Opsiyonel) CP1252 karakter kodlaması için doğru harita oluşturuldu.
+// Bu, Fransızca aksanlı karakterlerin yazıcıda doğru görünmesini sağlar.
+const Map<int, int> _cp1252Map = {
+  0x20AC: 0x80, // Euro Sign (€)
+  0x0082: 0x82, // Single Low-9 Quotation Mark
+  0x00E2: 0xE2, // Latin Small Letter A with Circumflex (â)
+  0x00E4: 0xE4, // Latin Small Letter A with Diaeresis (ä)
+  0x00E0: 0xE0, // Latin Small Letter A with Grave (à)
+  0x00E1: 0xE1, // Latin Small Letter A with Acute (á)
+  0x00E7: 0xE7, // Latin Small Letter C with Cedilla (ç)
+  0x00EA: 0xEA, // Latin Small Letter E with Circumflex (ê)
+  0x00EB: 0xEB, // Latin Small Letter E with Diaeresis (ë)
+  0x00E8: 0xE8, // Latin Small Letter E with Grave (è)
+  0x00E9: 0xE9, // Latin Small Letter E with Acute (é)
+  0x00EE: 0xEE, // Latin Small Letter I with Circumflex (î)
+  0x00EF: 0xEF, // Latin Small Letter I with Diaeresis (ï)
+  0x00F4: 0xF4, // Latin Small Letter O with Circumflex (ô)
+  0x00F6: 0xF6, // Latin Small Letter O with Diaeresis (ö)
+  0x00F2: 0xF2, // Latin Small Letter O with Grave (ò)
+  0x00FB: 0xFB, // Latin Small Letter U with Circumflex (û)
+  0x00F9: 0xF9, // Latin Small Letter U with Grave (ù)
+  0x00FF: 0xFF, // Latin Small Letter Y with Diaeresis (ÿ)
+  0x0152: 0x8C, // Latin Capital Ligature OE (Œ)
+  0x0153: 0x9C, // Latin Small Ligature OE (œ)
+  0x00C2: 0xC2, // Latin Capital Letter A with Circumflex (Â)
+  0x00C4: 0xC4, // Latin Capital Letter A with Diaeresis (Ä)
+  0x00C0: 0xC0, // Latin Capital Letter A with Grave (À)
+  0x00C7: 0xC7, // Latin Capital Letter C with Cedilla (Ç)
+  0x00CA: 0xCA, // Latin Capital Letter E with Circumflex (Ê)
+  0x00CB: 0xCB, // Latin Capital Letter E with Diaeresis (Ë)
+  0x00C8: 0xC8, // Latin Capital Letter E with Grave (È)
+  0x00C9: 0xC9, // Latin Capital Letter E with Acute (É)
+  0x00CE: 0xCE, // Latin Capital Letter I with Circumflex (Î)
+  0x00CF: 0xCF, // Latin Capital Letter I with Diaeresis (Ï)
+  0x00D4: 0xD4, // Latin Capital Letter O with Circumflex (Ô)
+  0x00D6: 0xD6, // Latin Capital Letter O with Diaeresis (Ö)
+  0x00D9: 0xD9, // Latin Capital Letter U with Grave (Ù)
+  0x00DB: 0xDB, // Latin Capital Letter U with Circumflex (Û)
+  0x0178: 0x9F, // Latin Capital Letter Y with Diaeresis (Ÿ)
+};
+
 void _writeCp1252(Socket socket, String text) {
   final out = <int>[];
   for (final r in text.runes) {
-    if (r == 0x20AC) { // €
-      out.add(0x80);
-      continue;
-    }
-    if (r <= 0x7F) { // ASCII
+    if (r <= 0x7F) { // Standart ASCII
       out.add(r);
-      continue;
-    }
-    final ch = String.fromCharCode(r);
-    const repl = {
-      'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
-      'ş':'s','Ş':'S','ü':'u','Ü':'U','é':'e','è':'e','ê':'e','á':'a','à':'a','â':'a',
-      'ô':'o','ù':'u','–':'-','—':'-','…':'...',
-      'Œ':'Oe','œ':'oe',
-    };
-    final s = repl[ch] ?? '?';
-    for (final cu in s.codeUnits) {
-      if (cu == 0x20AC) { out.add(0x80); } else { out.add(cu <= 0x7F ? cu : 0x3F); }
+    } else if (_cp1252Map.containsKey(r)) { // Haritadaki özel karakterler
+      out.add(_cp1252Map[r]!);
+    } else { // Haritada olmayan karakterler için '?'
+      out.add(0x3F); 
     }
   }
   socket.add(out);
 }
 
+// DÜZELTME: Yazdırma fonksiyonu, hata durumunda bile socket'in kapanmasını
+// garantilemek için try...finally bloğuna alındı.
 Future<void> printOrderAndroid(SavedOrder o) async {
-  final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
+  Socket? socket;
+  try {
+    socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  _cmd(socket, [27, 64]);
-  _cmd(socket, [27, 116, 16]);
+    _cmd(socket, [27, 64]); // Reset
+    _cmd(socket, [27, 116, 16]); // CP1252 (Western European)
 
-  _alignCenter(socket);
-  _size(socket, 17);
-  _boldOn(socket);
-  _writeCp1252(socket, '*** BISCORNUE ***\n');
-  _boldOff(socket);
-  _size(socket, 0);
-
-  if (o.customer.isNotEmpty) {
-    _size(socket, 1);
+    _alignCenter(socket);
+    _size(socket, 17);
     _boldOn(socket);
-    _writeCp1252(socket, 'Client: ${o.customer}\n');
+    _writeCp1252(socket, '*** BISCORNUE ***\n');
     _boldOff(socket);
     _size(socket, 0);
-  }
 
-  _boldOn(socket);
-  _size(socket, 1);
-  _writeCp1252(socket, 'Pret a: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}\n');
-  _size(socket, 0);
-  _boldOff(socket);
+    if (o.customer.isNotEmpty) {
+      _size(socket, 1);
+      _boldOn(socket);
+      _writeCp1252(socket, 'Client: ${o.customer}\n');
+      _boldOff(socket);
+      _size(socket, 0);
+    }
 
-  _alignLeft(socket);
-  _writeCp1252(socket, '------------------------------\n');
+    _boldOn(socket);
+    _size(socket, 1);
+    _writeCp1252(socket, 'Pret a: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}\n');
+    _size(socket, 0);
+    _boldOff(socket);
 
-  for (int i = 0; i < o.lines.length; i++) {
-    final l = o.lines[i];
-    _writeCp1252(socket, _rightLine('Item ${i + 1}: ${l.product.name}', _money(l.total)) + '\n');
-    for (final g in l.product.groups) {
-      final sel = l.picked[g.id] ?? const <OptionItem>[];
-      if (sel.isNotEmpty) {
-        _writeCp1252(socket, '  ${g.title}:\n');
-        for (final it in sel) {
-          _writeCp1252(socket, '    * ${it.label}\n');
+    _alignLeft(socket);
+    _writeCp1252(socket, '--------------------------------\n');
+
+    for (int i = 0; i < o.lines.length; i++) {
+      final l = o.lines[i];
+      _boldOn(socket);
+      _writeCp1252(socket, _rightLine('Article ${i + 1}: ${l.product.name}', _money(l.total)) + '\n');
+      _boldOff(socket);
+      for (final g in l.product.groups) {
+        final sel = l.picked[g.id] ?? const <OptionItem>[];
+        if (sel.isNotEmpty) {
+          _writeCp1252(socket, '  ${g.title}:\n');
+          for (final it in sel) {
+            _writeCp1252(socket, '    * ${it.label}\n');
+          }
         }
       }
+      if (i < o.lines.length - 1) {
+        _writeCp1252(socket, '................................\n');
+      }
     }
-    if (i != o.lines.length - 1) {
-      _writeCp1252(socket, '--------------------------------\n');
-    }
+
+    _writeCp1252(socket, '--------------------------------\n');
+    _alignRight(socket);
+    _boldOn(socket);
+    _size(socket, 17); // 1x genişlik, 2x yükseklik
+    _writeCp1252(socket, _rightLine('TOTAL', _money(o.total)) + '\n');
+    _size(socket, 0);
+    _boldOff(socket);
+
+    _cmd(socket, [10, 10, 10, 29, 86, 66, 0]); // 3 satır boşluk + kağıdı kes
+
+    await socket.flush();
+  } finally {
+    // Hata olsa da olmasa da socket'i güvenli bir şekilde kapat.
+    await socket?.close();
   }
-
-  _writeCp1252(socket, '------------------------------\n');
-  _alignRight(socket);
-  _boldOn(socket);
-  _size(socket, 1);
-  _writeCp1252(socket, _rightLine('TOTAL', '€${o.total.toStringAsFixed(2).replaceAll('.', ',')}') + '\n');
-  _size(socket, 0);
-  _boldOff(socket);
-
-  _cmd(socket, [10, 10, 29, 86, 66, 0]);
-
-  await socket.flush();
-  await socket.close();
 }
 
 String _formatEuro(double v) => '€${v.toStringAsFixed(2)}';
