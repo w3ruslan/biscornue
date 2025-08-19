@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,10 +41,8 @@ class App extends StatelessWidget {
 class Product {
   String name;
   final List<OptionGroup> groups;
-  Product({required this.name, List<OptionGroup>? groups})
-      : groups = groups ?? [];
+  Product({required this.name, List<OptionGroup>? groups}) : groups = groups ?? [];
 
-  // Toplam fiyat: sadece seçilen item’ların fiyatları toplanır
   double priceForSelection(Map<String, List<OptionItem>> picked) {
     double total = 0;
     for (final g in groups) {
@@ -52,12 +51,21 @@ class Product {
     }
     return total;
   }
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'groups': groups.map((g) => g.toJson()).toList(),
+  };
+  factory Product.fromJson(Map<String, dynamic> j) => Product(
+    name: j['name'],
+    groups: (j['groups'] as List? ?? []).map((e) => OptionGroup.fromJson(Map<String,dynamic>.from(e))).toList(),
+  );
 }
 
 class OptionGroup {
   final String id;
   String title;
-  bool multiple; // false=tek, true=çoklu
+  bool multiple;
   int minSelect;
   int maxSelect;
   final List<OptionItem> items;
@@ -69,6 +77,18 @@ class OptionGroup {
     required this.maxSelect,
     List<OptionItem>? items,
   }) : items = items ?? [];
+
+  Map<String, dynamic> toJson() => {
+    'id': id, 'title': title, 'multiple': multiple,
+    'min': minSelect, 'max': maxSelect,
+    'items': items.map((e) => e.toJson()).toList(),
+  };
+  factory OptionGroup.fromJson(Map<String, dynamic> j) => OptionGroup(
+    id: j['id'], title: j['title'],
+    multiple: j['multiple'] ?? false,
+    minSelect: j['min'] ?? 0, maxSelect: j['max'] ?? 1,
+    items: (j['items'] as List? ?? []).map((e) => OptionItem.fromJson(Map<String,dynamic>.from(e))).toList(),
+  );
 }
 
 class OptionItem {
@@ -76,13 +96,31 @@ class OptionItem {
   String label;
   double price;
   OptionItem({required this.id, required this.label, required this.price});
+
+  Map<String, dynamic> toJson() => {'id': id, 'label': label, 'price': price};
+  factory OptionItem.fromJson(Map<String, dynamic> j) =>
+      OptionItem(id: j['id'], label: j['label'], price: (j['price'] as num).toDouble());
 }
 
 class CartLine {
   final Product product;
-  final Map<String, List<OptionItem>> picked; // deep copy saklı
+  final Map<String, List<OptionItem>> picked;
   CartLine({required this.product, required this.picked});
   double get total => product.priceForSelection(picked);
+
+  Map<String, dynamic> toJson() => {
+    'product': product.toJson(),
+    'picked': {
+      for (final e in picked.entries) e.key: e.value.map((it) => it.toJson()).toList()
+    },
+  };
+  factory CartLine.fromJson(Map<String, dynamic> j) => CartLine(
+    product: Product.fromJson(Map<String, dynamic>.from(j['product'])),
+    picked: {
+      for (final e in (j['picked'] as Map).entries)
+        e.key: (e.value as List).map((x) => OptionItem.fromJson(Map<String,dynamic>.from(x))).toList()
+    },
+  );
 }
 
 class SavedOrder {
@@ -100,6 +138,21 @@ class SavedOrder {
     required this.customer,
   });
   double get total => lines.fold(0.0, (s, l) => s + l.total);
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'createdAt': createdAt.toIso8601String(),
+    'readyAt': readyAt.toIso8601String(),
+    'customer': customer,
+    'lines': lines.map((l) => l.toJson()).toList(),
+  };
+  factory SavedOrder.fromJson(Map<String, dynamic> j) => SavedOrder(
+    id: j['id'],
+    createdAt: DateTime.parse(j['createdAt']),
+    readyAt: DateTime.parse(j['readyAt']),
+    customer: j['customer'] ?? '',
+    lines: (j['lines'] as List).map((e) => CartLine.fromJson(Map<String,dynamic>.from(e))).toList(),
+  );
 }
 
 class AppState extends ChangeNotifier {
@@ -108,9 +161,28 @@ class AppState extends ChangeNotifier {
   final List<SavedOrder> orders = [];
   int prepMinutes = 5;
 
+  Future<void> _saveOrders() async {
+    final sp = await SharedPreferences.getInstance();
+    final data = orders.map((o) => o.toJson()).toList();
+    await sp.setString('orders_json', jsonEncode(data));
+  }
+
+  Future<void> _loadOrders() async {
+    final sp = await SharedPreferences.getInstance();
+    final raw = sp.getString('orders_json');
+    if (raw != null && raw.isNotEmpty) {
+      final list = jsonDecode(raw) as List;
+      orders
+        ..clear()
+        ..addAll(list.map((e) => SavedOrder.fromJson(Map<String,dynamic>.from(e))));
+      notifyListeners();
+    }
+  }
+
   Future<void> loadSettings() async {
     final sp = await SharedPreferences.getInstance();
     prepMinutes = sp.getInt('prepMinutes') ?? 5;
+    await _loadOrders(); // << EKLENDİ
     notifyListeners();
   }
 
@@ -160,9 +232,14 @@ class AppState extends ChangeNotifier {
       customer: customer,
     ));
     cart.clear();
+    _saveOrders(); // << EKLENDİ
     notifyListeners();
   }
-  void clearOrders() { orders.clear(); notifyListeners(); }
+  void clearOrders() {
+    orders.clear();
+    _saveOrders(); // << EKLENDİ
+    notifyListeners();
+  }
 }
 
 /* Ortak listeler (menü data helpers) */
