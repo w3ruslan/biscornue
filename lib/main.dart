@@ -3,17 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /* =======================
-    Sabitler
-    ======================= */
+    Sabitler
+    ======================= */
 // LÜTFEN BU IP ADRESİNİ KENDİ YAZICINIZIN IP ADRESİYLE DEĞİŞTİRİN
 const String PRINTER_IP = '192.168.1.1'; // <-- Epson yazıcının IP'si
-const int    PRINTER_PORT = 9100;        // Genelde 9100 (RAW)
+const int    PRINTER_PORT = 9100;       // Genelde 9100 (RAW)
 
 const String _ADMIN_PIN = '6538';
 
 /* =======================
-    ENTRY
-    ======================= */
+    ENTRY
+    ======================= */
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final appState = AppState();
@@ -35,8 +35,8 @@ class App extends StatelessWidget {
 }
 
 /* =======================
-    MODELLER & STATE
-    ======================= */
+    MODELLER & STATE
+    ======================= */
 class Product {
   String name;
   final List<OptionGroup> groups;
@@ -167,44 +167,44 @@ class AppState extends ChangeNotifier {
 
 /* Ortak listeler (menü data helpers) */
 List<OptionItem> _meats(double base) => [
-  OptionItem(id: 'kebab',        label: 'Kebab',                 price: base),
-  OptionItem(id: 'steak',        label: 'Steak hache maison',    price: base),
-  OptionItem(id: 'poulet_curry', label: 'Poulet curry maison',   price: base),
-  OptionItem(id: 'tenders',      label: 'Tenders',               price: base),
-  OptionItem(id: 'cordon',       label: 'Cordon bleu',           price: base),
-  OptionItem(id: 'nuggets',      label: 'Nuggets',               price: base),
+  OptionItem(id: 'kebab',        label: 'Kebab',                  price: base),
+  OptionItem(id: 'steak',        label: 'Steak hache maison',     price: base),
+  OptionItem(id: 'poulet_curry', label: 'Poulet curry maison',    price: base),
+  OptionItem(id: 'tenders',      label: 'Tenders',                price: base),
+  OptionItem(id: 'cordon',       label: 'Cordon bleu',            price: base),
+  OptionItem(id: 'nuggets',      label: 'Nuggets',                price: base),
 ];
 
 List<OptionItem> _supps() => [
-  OptionItem(id: 'cheddar',   label: 'Cheddar',                price: 1.50),
-  OptionItem(id: 'mozza',     label: 'Mozzarella rapee',       price: 1.50),
-  OptionItem(id: 'feta',      label: 'Feta',                   price: 1.50),
-  OptionItem(id: 'porc',      label: 'Poitrine de porc fume',  price: 1.50),
-  OptionItem(id: 'chevre',    label: 'Chevre',                 price: 1.50),
-  OptionItem(id: 'legumes',   label: 'Legumes grilles',        price: 1.50),
-  OptionItem(id: 'oeuf',      label: 'Oeuf',                   price: 1.50),
-  OptionItem(id: 'd_cheddar', label: 'Double Cheddar',         price: 3.00),
-  OptionItem(id: 'd_mozza',   label: 'Double Mozzarella rapee',price: 3.00),
-  OptionItem(id: 'd_porc',    label: 'Double Poitrine de porc fume', price: 3.00),
+  OptionItem(id: 'cheddar',   label: 'Cheddar',                     price: 1.50),
+  OptionItem(id: 'mozza',     label: 'Mozzarella rapee',            price: 1.50),
+  OptionItem(id: 'feta',      label: 'Feta',                        price: 1.50),
+  OptionItem(id: 'porc',      label: 'Poitrine de porc fume',       price: 1.50),
+  OptionItem(id: 'chevre',    label: 'Chevre',                      price: 1.50),
+  OptionItem(id: 'legumes',   label: 'Legumes grilles',             price: 1.50),
+  OptionItem(id: 'oeuf',      label: 'Oeuf',                        price: 1.50),
+  OptionItem(id: 'd_cheddar', label: 'Double Cheddar',              price: 3.00),
+  OptionItem(id: 'd_mozza',   label: 'Double Mozzarella rapee',     price: 3.00),
+  OptionItem(id: 'd_porc',    label: 'Double Poitrine de porc fume',price: 3.00),
 ];
 
 List<OptionItem> _sauces() => [
-  OptionItem(id: 'sans_sauce', label: 'Sans sauce',            price: 0.00),
-  OptionItem(id: 'blanche',    label: 'Sauce blanche maison',  price: 0.00),
-  OptionItem(id: 'ketchup',    label: 'Ketchup',               price: 0.00),
-  OptionItem(id: 'mayo',       label: 'Mayonnaise',            price: 0.00),
-  OptionItem(id: 'algerienne', label: 'Algerienne',            price: 0.00),
-  OptionItem(id: 'bbq',        label: 'Barbecue',              price: 0.00),
-  OptionItem(id: 'bigburger',  label: 'Big Burger',            price: 0.00),
-  OptionItem(id: 'harissa',    label: 'Harissa',               price: 0.00),
+  OptionItem(id: 'sans_sauce', label: 'Sans sauce',           price: 0.00),
+  OptionItem(id: 'blanche',    label: 'Sauce blanche maison',   price: 0.00),
+  OptionItem(id: 'ketchup',    label: 'Ketchup',                price: 0.00),
+  OptionItem(id: 'mayo',       label: 'Mayonnaise',             price: 0.00),
+  OptionItem(id: 'algerienne', label: 'Algerienne',             price: 0.00),
+  OptionItem(id: 'bbq',        label: 'Barbecue',               price: 0.00),
+  OptionItem(id: 'bigburger',  label: 'Big Burger',             price: 0.00),
+  OptionItem(id: 'harissa',    label: 'Harissa',                price: 0.00),
 ];
 
 // Tacos’a özel sos seçenekleri
 List<OptionItem> _tacosSauces() => [
   ..._sauces(),
-  OptionItem(id: 'fromagere',            label: 'Sauce fromagere',           price: 0.00),
-  OptionItem(id: 'seulement_fromagere',  label: 'Seulement sauce fromagere', price: 0.00),
-  OptionItem(id: 'sans_fromagere',       label: 'Sans sauce fromagere',      price: 0.00),
+  OptionItem(id: 'fromagere',           label: 'Sauce fromagere',           price: 0.00),
+  OptionItem(id: 'seulement_fromagere', label: 'Seulement sauce fromagere', price: 0.00),
+  OptionItem(id: 'sans_fromagere',      label: 'Sans sauce fromagere',      price: 0.00),
 ];
 
 // Ortak formüller
@@ -227,8 +227,8 @@ class AppScope extends InheritedNotifier<AppState> {
 }
 
 /* =======================
-    HOME (4 sekme)
-    ======================= */
+    HOME (4 sekme)
+    ======================= */
 class Home extends StatefulWidget {
   const Home({super.key});
   @override
@@ -269,12 +269,12 @@ class _HomeState extends State<Home> {
           OptionGroup(
             id: 'crudites', title: 'Crudites / Retirer', multiple: true, minSelect: 0, maxSelect: 4,
             items: [
-              OptionItem(id: 'avec_crudites',  label: 'Avec crudités',   price: 0.00),
-              OptionItem(id: 'sans_crudites',  label: 'Sans crudites',   price: 0.00),
-              OptionItem(id: 'sans_tomates',   label: 'Sans tomates',    price: 0.00),
-              OptionItem(id: 'sans_salade',    label: 'Sans salade',     price: 0.00),
-              OptionItem(id: 'sans_oignons',   label: 'Sans oignons',    price: 0.00),
-              OptionItem(id: 'sans_cornichons',label: 'Sans cornichons', price: 0.00),
+              OptionItem(id: 'avec_crudites',   label: 'Avec crudités',   price: 0.00),
+              OptionItem(id: 'sans_crudites',   label: 'Sans crudites',   price: 0.00),
+              OptionItem(id: 'sans_tomates',    label: 'Sans tomates',    price: 0.00),
+              OptionItem(id: 'sans_salade',     label: 'Sans salade',     price: 0.00),
+              OptionItem(id: 'sans_oignons',    label: 'Sans oignons',    price: 0.00),
+              OptionItem(id: 'sans_cornichons', label: 'Sans cornichons', price: 0.00),
             ],
           ),
           OptionGroup(
@@ -294,14 +294,14 @@ class _HomeState extends State<Home> {
         // 2) TACOS 1/2/3 VIANDES
         Product(name: 'Tacos 1 viande', groups: [
           OptionGroup(id: 'viande1_t1', title: 'Viande 1', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(10.00)),
-          OptionGroup(id: 'supp_t1',   title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
+          OptionGroup(id: 'supp_t1',    title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
           OptionGroup(id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _tacosSauces()),
           OptionGroup(id: 'formule_t1', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
         ]),
         Product(name: 'Tacos 2 viandes', groups: [
           OptionGroup(id: 'viande1_t2', title: 'Viande 1', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(12.00)),
           OptionGroup(id: 'viande2_t2', title: 'Viande 2', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
-          OptionGroup(id: 'supp_t2',   title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
+          OptionGroup(id: 'supp_t2',    title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
           OptionGroup(id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _tacosSauces()),
           OptionGroup(id: 'formule_t2', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
         ]),
@@ -309,7 +309,7 @@ class _HomeState extends State<Home> {
           OptionGroup(id: 'viande1_t3', title: 'Viande 1', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(14.00)),
           OptionGroup(id: 'viande2_t3', title: 'Viande 2', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
           OptionGroup(id: 'viande3_t3', title: 'Viande 3', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
-          OptionGroup(id: 'supp_t3',   title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
+          OptionGroup(id: 'supp_t3',    title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
           OptionGroup(id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _tacosSauces()),
           OptionGroup(id: 'formule_t3', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
         ]),
@@ -430,8 +430,8 @@ class _HomeState extends State<Home> {
 }
 
 /* =======================
-    PAGE 1 : PRODUITS
-    ======================= */
+    PAGE 1 : PRODUITS
+    ======================= */
 class ProductsPage extends StatelessWidget {
   const ProductsPage({super.key});
 
@@ -554,8 +554,8 @@ class _ProductCard extends StatelessWidget {
 }
 
 /* =======================
-    PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
-    ======================= */
+    PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
+    ======================= */
 class CreateProductPage extends StatefulWidget {
   final void Function(int) onGoToTab;
   final int? editIndex;
@@ -713,7 +713,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
         ],
 
         TextField(controller: nameCtrl,
-          decoration: const InputDecoration(labelText: 'Nom du produit', border: OutlineInputBorder())),
+            decoration: const InputDecoration(labelText: 'Nom du produit', border: OutlineInputBorder())),
         const SizedBox(height: 12),
         Row(children: [
           FilledButton.icon(onPressed: addGroup, icon: const Icon(Icons.add), label: const Text('Ajouter un groupe')),
@@ -914,8 +914,8 @@ class _OptionEditorState extends State<_OptionEditor> {
 }
 
 /* =======================
-    WIZARD
-    ======================= */
+    WIZARD
+    ======================= */
 class OrderWizard extends StatefulWidget {
   final Product product;
   final Map<String, List<OptionItem>>? initialPicked;
@@ -964,50 +964,39 @@ class _OrderWizardState extends State<OrderWizard> {
   // Çoklu seçim kuralları (crudités / sans sauce / fromagère)
   void _toggleMulti(OptionGroup g, OptionItem it) {
     final list = List<OptionItem>.from(picked[g.id] ?? []);
+    final isCrud = g.id == 'crudites';
 
-    bool has(String id) => list.any((e) => e.id == id);
-    void removeId(String id) => list.removeWhere((e) => e.id == id);
+    bool isSans(String id) => id == 'sans_crudites';
+    bool isAvec(String id) => id == 'avec_crudites' || id == 'avec'; // id'ni hangisini kullandıysan
 
-    // CRUDITES kuralları
-    if (g.id == 'crudites') {
-      if (it.id == 'sans_crudites' || it.id == 'avec_crudites') {
-        picked[g.id] = [it]; setState((){}); return;
+    final exists = list.any((e) => e.id == it.id);
+
+    // ÖZEL: Sans/Avec tek başına çalışsın ama tekrar dokununca kaldırılsın
+    if (isCrud && (isSans(it.id) || isAvec(it.id))) {
+      if (exists) {
+        // seçiliyse kaldır
+        list.removeWhere((e) => e.id == it.id);
+        picked[g.id] = list;
       } else {
-        removeId('sans_crudites');
-        removeId('avec_crudites');
+        // değilse sadece kendisi kalsın
+        picked[g.id] = [it];
       }
+      setState(() {});
+      return;
     }
 
-    // Tüm "sauce" gruplarında SANS SAUCE tek başına
-    final isAnySauceGroup = g.id.contains('sauce');
-    if (isAnySauceGroup && it.id == 'sans_sauce') {
-      picked[g.id] = [it]; setState((){}); return;
-    }
-    if (isAnySauceGroup) removeId('sans_sauce');
-
-    // TACOS: fromagère özel kuralları
-    if (g.id == 'sauce_tacos') {
-      if (it.id == 'seulement_fromagere') {
-        picked[g.id] = [it]; setState((){}); return;
-      }
-      if (it.id == 'sans_fromagere') {
-        removeId('fromagere');
-        // normal akış devam
-      } else {
-        if (has('sans_fromagere') && it.id == 'fromagere') {
-          setState((){}); return; // yasak
-        }
-        removeId('seulement_fromagere');
-      }
+    // ÖZEL: Normal bir maddeye tıklanıyorsa, varsa sans/avec'i temizle
+    if (isCrud) {
+      list.removeWhere((e) => isSans(e.id) || isAvec(e.id));
     }
 
-    final exists = has(it.id);
     if (exists) {
       list.removeWhere((e) => e.id == it.id);
     } else {
-      if (list.length >= g.maxSelect) { setState((){}); return; }
+      if (list.length >= g.maxSelect) return;
       list.add(it);
     }
+
     picked[g.id] = list;
     setState(() {});
   }
@@ -1121,16 +1110,12 @@ class _GroupStep extends StatelessWidget {
 
     final selectedList = picked[group.id] ?? const <OptionItem>[];
 
-    // Seçim durum bayrakları (tile başına değişmeyenler)
-    bool has(String id) => selectedList.any((e) => e.id == id);
-    final crudSans = group.id == 'crudites' && has('sans_crudites');
-    final crudAvec = group.id == 'crudites' && has('avec_crudites');
+    bool isAvecId(String id) => id == 'avec_crudites' || id == 'avec';
+    bool isSansId(String id) => id == 'sans_crudites';
 
-    final anySauceGroup = group.id.contains('sauce');
-    final sauceSans = anySauceGroup && has('sans_sauce');
-
-    final tacosOnlyFrom = group.id == 'sauce_tacos' && has('seulement_fromagere');
-    final tacosNoFrom   = group.id == 'sauce_tacos' && has('sans_fromagere');
+    final isCrudGroup = group.id == 'crudites';
+    final avecOn = isCrudGroup && selectedList.any((e) => isAvecId(e.id));
+    final sansOn = isCrudGroup && selectedList.any((e) => isSansId(e.id));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1159,12 +1144,9 @@ class _GroupStep extends StatelessWidget {
               final it = group.items[i];
               final isSelected = selectedList.any((e) => e.id == it.id);
 
-              final disabled =
-                  (crudSans && it.id != 'sans_crudites') ||
-                  (crudAvec && it.id != 'avec_crudites') ||
-                  (sauceSans && it.id != 'sans_sauce') ||
-                  (tacosOnlyFrom && it.id != 'seulement_fromagere') ||
-                  (tacosNoFrom && it.id == 'fromagere');
+              // YALNIZCA diğerlerini kilitle; seçili özel buton dokunulabilir kalsın
+              final disabled = isCrudGroup && (avecOn || sansOn) &&
+                  !((avecOn && isAvecId(it.id)) || (sansOn && isSansId(it.id)));
 
               void onTap() {
                 if (group.multiple) {
@@ -1288,8 +1270,8 @@ class _Summary extends StatelessWidget {
 }
 
 /* =======================
-    PAGE 3 : PANIER
-    ======================= */
+    PAGE 3 : PANIER
+    ======================= */
 class CartPage extends StatelessWidget {
   const CartPage({super.key});
   @override
@@ -1399,7 +1381,7 @@ class CartPage extends StatelessWidget {
               app.finalizeCartToOrder(customer: name);
               if (context.mounted) {
                 _snack(context,
-                  'Commande validée pour "$name". Prêt à ${_two(ready.hour)}:${_two(ready.minute)}.');
+                    'Commande validée pour "$name". Prêt à ${_two(ready.hour)}:${_two(ready.minute)}.');
               }
             },
             icon: const Icon(Icons.check),
@@ -1412,8 +1394,8 @@ class CartPage extends StatelessWidget {
 }
 
 /* =======================
-    PAGE 4 : COMMANDES + YAZDIRMA
-    ======================= */
+    PAGE 4 : COMMANDES + YAZDIRMA
+    ======================= */
 class OrdersPage extends StatelessWidget {
   const OrdersPage({super.key});
   @override
@@ -1562,8 +1544,8 @@ class OrdersPage extends StatelessWidget {
 }
 
 /* =======================
-    DİYALOGLAR & UTIL
-    ======================= */
+    DİYALOGLAR & UTIL
+    ======================= */
 Future<bool> _askPin(BuildContext context) async {
   final ctrl = TextEditingController();
   final ok = await showDialog<bool>(
@@ -1657,8 +1639,8 @@ void _showWarn(BuildContext context, String msg) {
 }
 
 /* =======================
-    Choisir butonu
-    ======================= */
+    Choisir butonu
+    ======================= */
 Widget choisirButton(VoidCallback onTap, BuildContext context) {
   final color = Theme.of(context).colorScheme;
   return Material(
@@ -1703,8 +1685,8 @@ void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
 void _writeCp1252(Socket socket, String text) {
   final out = <int>[];
   for (final r in text.runes) {
-    if (r == 0x20AC) { out.add(0x80); continue; }          // €
-    if (r <= 0x7F)   { out.add(r); continue; }             // ASCII
+    if (r == 0x20AC) { out.add(0x80); continue; }       // €
+    if (r <= 0x7F)   { out.add(r); continue; }           // ASCII
     final ch = String.fromCharCode(r);
     const repl = {
       'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
@@ -1723,8 +1705,8 @@ void _writeCp1252(Socket socket, String text) {
 Future<void> printOrderAndroid(SavedOrder o) async {
   final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  _cmd(socket, [27, 64]);         // init
-  _cmd(socket, [27, 116, 16]);    // codepage (CP1252 genelde 16)
+  _cmd(socket, [27, 64]);       // init
+  _cmd(socket, [27, 116, 16]);   // codepage (CP1252 genelde 16)
 
   _alignCenter(socket);
   _size(socket, 17);
