@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,10 +10,6 @@ const String PRINTER_IP = '192.168.1.1'; // <-- Epson yazıcının IP'si
 const int    PRINTER_PORT = 9100;        // Genelde 9100 (RAW)
 
 const String _ADMIN_PIN = '6538';
-
-// Kalıcı depolama anahtarları
-const String _kOrdersKey   = 'orders_v1';
-const String _kProductsKey = 'products_v1';
 
 /* =======================
     ENTRY
@@ -48,6 +43,7 @@ class Product {
   Product({required this.name, List<OptionGroup>? groups})
       : groups = groups ?? [];
 
+  // Toplam fiyat: sadece seçilen item’ların fiyatları toplanır
   double priceForSelection(Map<String, List<OptionItem>> picked) {
     double total = 0;
     for (final g in groups) {
@@ -56,17 +52,6 @@ class Product {
     }
     return total;
   }
-
-  Map<String, dynamic> toJson() => {
-    'name': name,
-    'groups': groups.map((g) => g.toJson()).toList(),
-  };
-  factory Product.fromJson(Map<String, dynamic> j) => Product(
-    name: j['name'] ?? '',
-    groups: (j['groups'] as List<dynamic>? ?? [])
-        .map((e) => OptionGroup.fromJson(e as Map<String, dynamic>))
-        .toList(),
-  );
 }
 
 class OptionGroup {
@@ -84,25 +69,6 @@ class OptionGroup {
     required this.maxSelect,
     List<OptionItem>? items,
   }) : items = items ?? [];
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'title': title,
-    'multiple': multiple,
-    'minSelect': minSelect,
-    'maxSelect': maxSelect,
-    'items': items.map((i) => i.toJson()).toList(),
-  };
-  factory OptionGroup.fromJson(Map<String, dynamic> j) => OptionGroup(
-    id: j['id'] ?? '',
-    title: j['title'] ?? '',
-    multiple: j['multiple'] ?? false,
-    minSelect: (j['minSelect'] ?? 0) as int,
-    maxSelect: (j['maxSelect'] ?? 1) as int,
-    items: (j['items'] as List<dynamic>? ?? [])
-        .map((e) => OptionItem.fromJson(e as Map<String, dynamic>))
-        .toList(),
-  );
 }
 
 class OptionItem {
@@ -110,13 +76,6 @@ class OptionItem {
   String label;
   double price;
   OptionItem({required this.id, required this.label, required this.price});
-
-  Map<String, dynamic> toJson() => {'id': id, 'label': label, 'price': price};
-  factory OptionItem.fromJson(Map<String, dynamic> j) => OptionItem(
-    id: j['id'] ?? '',
-    label: j['label'] ?? '',
-    price: (j['price'] as num?)?.toDouble() ?? 0.0,
-  );
 }
 
 class CartLine {
@@ -124,20 +83,6 @@ class CartLine {
   final Map<String, List<OptionItem>> picked; // deep copy saklı
   CartLine({required this.product, required this.picked});
   double get total => product.priceForSelection(picked);
-
-  Map<String, dynamic> toJson() => {
-    'product': product.toJson(),
-    'picked': picked.map((k, v) => MapEntry(k, v.map((e) => e.toJson()).toList())),
-  };
-  factory CartLine.fromJson(Map<String, dynamic> j) {
-    final prod = Product.fromJson(j['product'] as Map<String, dynamic>);
-    final Map<String, List<OptionItem>> pk = {};
-    final raw = (j['picked'] as Map<String, dynamic>? ?? {});
-    raw.forEach((key, val) {
-      pk[key] = (val as List<dynamic>).map((e) => OptionItem.fromJson(e as Map<String, dynamic>)).toList();
-    });
-    return CartLine(product: prod, picked: pk);
-  }
 }
 
 class SavedOrder {
@@ -146,7 +91,7 @@ class SavedOrder {
   final DateTime readyAt;
   final List<CartLine> lines;
   final String customer;
-  
+
   SavedOrder({
     required this.id,
     required this.createdAt,
@@ -155,23 +100,6 @@ class SavedOrder {
     required this.customer,
   });
   double get total => lines.fold(0.0, (s, l) => s + l.total);
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'createdAt': createdAt.toIso8601String(),
-    'readyAt': readyAt.toIso8601String(),
-    'customer': customer,
-    'lines': lines.map((l) => l.toJson()).toList(),
-  };
-  factory SavedOrder.fromJson(Map<String, dynamic> j) => SavedOrder(
-    id: j['id'] ?? '',
-    createdAt: DateTime.tryParse(j['createdAt'] ?? '') ?? DateTime.now(),
-    readyAt: DateTime.tryParse(j['readyAt'] ?? '') ?? DateTime.now(),
-    customer: j['customer'] ?? '',
-    lines: (j['lines'] as List<dynamic>? ?? [])
-        .map((e) => CartLine.fromJson(e as Map<String, dynamic>))
-        .toList(),
-  );
 }
 
 class AppState extends ChangeNotifier {
@@ -180,53 +108,12 @@ class AppState extends ChangeNotifier {
   final List<SavedOrder> orders = [];
   int prepMinutes = 5;
 
-  /* ---------- Kalıcı yükleme ---------- */
   Future<void> loadSettings() async {
     final sp = await SharedPreferences.getInstance();
     prepMinutes = sp.getInt('prepMinutes') ?? 5;
-
-    // Orders
-    final ordersJson = sp.getString(_kOrdersKey);
-    if (ordersJson != null && ordersJson.isNotEmpty) {
-      try {
-        final list = (jsonDecode(ordersJson) as List<dynamic>)
-            .map((e) => SavedOrder.fromJson(e as Map<String, dynamic>))
-            .toList();
-        orders
-          ..clear()
-          ..addAll(list);
-      } catch (_) {/* ignore */}
-    }
-
-    // Products (isteğe bağlı kalıcı) — varsa tohum yüklemesi yapılmaz
-    final productsJson = sp.getString(_kProductsKey);
-    if (productsJson != null && productsJson.isNotEmpty) {
-      try {
-        final list = (jsonDecode(productsJson) as List<dynamic>)
-            .map((e) => Product.fromJson(e as Map<String, dynamic>))
-            .toList();
-        products
-          ..clear()
-          ..addAll(list);
-      } catch (_) {/* ignore */}
-    }
-
     notifyListeners();
   }
 
-  Future<void> _saveOrders() async {
-    final sp = await SharedPreferences.getInstance();
-    final data = jsonEncode(orders.map((e) => e.toJson()).toList());
-    await sp.setString(_kOrdersKey, data);
-  }
-
-  Future<void> _saveProducts() async {
-    final sp = await SharedPreferences.getInstance();
-    final data = jsonEncode(products.map((e) => e.toJson()).toList());
-    await sp.setString(_kProductsKey, data);
-  }
-
-  /* ---------- Mutasyonlar ---------- */
   Future<void> setPrepMinutes(int m) async {
     prepMinutes = m;
     final sp = await SharedPreferences.getInstance();
@@ -234,33 +121,22 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addProduct(Product p) {
-    products.add(p);
-    _saveProducts();
-    notifyListeners();
-  }
-
-  void replaceProductAt(int i, Product p) {
-    products[i] = p;
-    _saveProducts();
-    notifyListeners();
-  }
+  void addProduct(Product p) { products.add(p); notifyListeners(); }
+  void replaceProductAt(int i, Product p) { products[i] = p; notifyListeners(); }
 
   void addLineToCart(Product p, Map<String, List<OptionItem>> picked) {
-    final deep = {for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)};
+    final deep = { for (final e in picked.entries) e.key: List<OptionItem>.from(e.value) };
     cart.add(CartLine(product: p, picked: deep));
     notifyListeners();
   }
-
-  void removeCartLineAt(int i) { 
-    if (i>=0 && i<cart.length) { cart.removeAt(i); notifyListeners(); } 
-  }
-
+  void removeCartLineAt(int i) { if (i>=0 && i<cart.length) { cart.removeAt(i); notifyListeners(); } }
   void clearCart() { cart.clear(); notifyListeners(); }
 
   void updateCartLineAt(int i, Map<String, List<OptionItem>> picked) {
     if (i < 0 || i >= cart.length) return;
-    final deep = {for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)};
+    final deep = {
+      for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
+    };
     final p = cart[i].product;
     cart[i] = CartLine(product: p, picked: deep);
     notifyListeners();
@@ -270,7 +146,7 @@ class AppState extends ChangeNotifier {
     if (cart.isEmpty) return;
     final deepLines = cart.map((l) => CartLine(
       product: l.product,
-      picked: {for (final e in l.picked.entries) e.key: List<OptionItem>.from(e.value)},
+      picked: { for (final e in l.picked.entries) e.key: List<OptionItem>.from(e.value) },
     )).toList();
 
     final now   = DateTime.now();
@@ -284,16 +160,60 @@ class AppState extends ChangeNotifier {
       customer: customer,
     ));
     cart.clear();
-    _saveOrders();
     notifyListeners();
   }
-
-  void clearOrders() { 
-    orders.clear(); 
-    _saveOrders();
-    notifyListeners(); 
-  }
+  void clearOrders() { orders.clear(); notifyListeners(); }
 }
+
+/* Ortak listeler (menü data helpers) */
+List<OptionItem> _meats(double base) => [
+  OptionItem(id: 'kebab',        label: 'Kebab',                 price: base),
+  OptionItem(id: 'steak',        label: 'Steak hache maison',    price: base),
+  OptionItem(id: 'poulet_curry', label: 'Poulet curry maison',   price: base),
+  OptionItem(id: 'tenders',      label: 'Tenders',               price: base),
+  OptionItem(id: 'cordon',       label: 'Cordon bleu',           price: base),
+  OptionItem(id: 'nuggets',      label: 'Nuggets',               price: base),
+];
+
+List<OptionItem> _supps() => [
+  OptionItem(id: 'cheddar',   label: 'Cheddar',                price: 1.50),
+  OptionItem(id: 'mozza',     label: 'Mozzarella rapee',       price: 1.50),
+  OptionItem(id: 'feta',      label: 'Feta',                   price: 1.50),
+  OptionItem(id: 'porc',      label: 'Poitrine de porc fume',  price: 1.50),
+  OptionItem(id: 'chevre',    label: 'Chevre',                 price: 1.50),
+  OptionItem(id: 'legumes',   label: 'Legumes grilles',        price: 1.50),
+  OptionItem(id: 'oeuf',      label: 'Oeuf',                   price: 1.50),
+  OptionItem(id: 'd_cheddar', label: 'Double Cheddar',         price: 3.00),
+  OptionItem(id: 'd_mozza',   label: 'Double Mozzarella rapee',price: 3.00),
+  OptionItem(id: 'd_porc',    label: 'Double Poitrine de porc fume', price: 3.00),
+];
+
+List<OptionItem> _sauces() => [
+  OptionItem(id: 'sans_sauce', label: 'Sans sauce',            price: 0.00),
+  OptionItem(id: 'blanche',    label: 'Sauce blanche maison',  price: 0.00),
+  OptionItem(id: 'ketchup',    label: 'Ketchup',               price: 0.00),
+  OptionItem(id: 'mayo',       label: 'Mayonnaise',            price: 0.00),
+  OptionItem(id: 'algerienne', label: 'Algerienne',            price: 0.00),
+  OptionItem(id: 'bbq',        label: 'Barbecue',              price: 0.00),
+  OptionItem(id: 'bigburger',  label: 'Big Burger',            price: 0.00),
+  OptionItem(id: 'harissa',    label: 'Harissa',               price: 0.00),
+];
+
+// Tacos’a özel sos seçenekleri
+List<OptionItem> _tacosSauces() => [
+  ..._sauces(),
+  OptionItem(id: 'fromagere',            label: 'Sauce fromagere',           price: 0.00),
+  OptionItem(id: 'seulement_fromagere',  label: 'Seulement sauce fromagere', price: 0.00),
+  OptionItem(id: 'sans_fromagere',       label: 'Sans sauce fromagere',      price: 0.00),
+];
+
+// Ortak formüller
+List<OptionItem> _formules() => [
+  OptionItem(id: 'seul',    label: 'Seul',                    price: 0.00),
+  OptionItem(id: 'frites',  label: 'Avec frites',             price: 1.00),
+  OptionItem(id: 'boisson', label: 'Avec boisson',            price: 1.00),
+  OptionItem(id: 'menu',    label: 'Avec frites et boisson',  price: 2.00),
+];
 
 /* InheritedNotifier: global state erişimi */
 class AppScope extends InheritedNotifier<AppState> {
@@ -326,18 +246,17 @@ class _HomeState extends State<Home> {
     _seeded = true;
 
     final app = AppScope.of(context);
-    // Yalnızca ürün yoksa tohumla (kalıcıdan yüklenmediyse)
     if (app.products.isEmpty) {
       final products = <Product>[
+        // 1) SANDWICH
         Product(name: 'Sandwich', groups: [
           OptionGroup(
             id: 'type_sand', title: 'Sandwich', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
-              OptionItem(id: 'kebab',     label: 'Kebab',        price: 8.90),
-              OptionItem(id: 'poulet',    label: 'Poulet',       price: 8.90),
-              OptionItem(id: 'steak',     label: 'Steak hache',  price: 8.90),
-              OptionItem(id: 'vege',      label: 'Vegetarien',   price: 8.90),
-              OptionItem(id: 'berlineur', label: 'Berlineur',    price: 10.90),
+              OptionItem(id: 'kebab',       label: 'Kebab',         price: 10.00),
+              OptionItem(id: 'curryosite',  label: 'La Curryosite', price: 10.00),
+              OptionItem(id: 'vege',        label: 'Vegetarien',    price: 10.00),
+              OptionItem(id: 'berlineur',   label: 'Berlineur',     price: 12.00),
             ],
           ),
           OptionGroup(
@@ -348,156 +267,68 @@ class _HomeState extends State<Home> {
             ],
           ),
           OptionGroup(
-            id: 'crudites',
-            title: 'Crudites / Retirer (max 4)',
-            multiple: true,
-            minSelect: 0,
-            maxSelect: 4,
+            id: 'crudites', title: 'Crudites / Retirer', multiple: true, minSelect: 0, maxSelect: 4,
             items: [
-              OptionItem(id: 'sans_crudites', label: 'Sans crudites', price: 0),
-              OptionItem(id: 'sans_tomates', label: 'Sans tomates', price: 0),
-              OptionItem(id: 'sans_salade', label: 'Sans salade', price: 0),
-              OptionItem(id: 'sans_oignons', label: 'Sans oignons', price: 0),
-              OptionItem(id: 'sans_cornichons', label: 'Sans cornichons', price: 0),
+              OptionItem(id: 'avec_crudites',  label: 'Avec crudités',   price: 0.00),
+              OptionItem(id: 'sans_crudites',  label: 'Sans crudites',   price: 0.00),
+              OptionItem(id: 'sans_tomates',   label: 'Sans tomates',    price: 0.00),
+              OptionItem(id: 'sans_salade',    label: 'Sans salade',     price: 0.00),
+              OptionItem(id: 'sans_oignons',   label: 'Sans oignons',    price: 0.00),
+              OptionItem(id: 'sans_cornichons',label: 'Sans cornichons', price: 0.00),
             ],
           ),
           OptionGroup(
             id: 'supp', title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3,
-            items: [
-              OptionItem(id: 'cheddar',        label: 'Cheddar',                      price: 1.50),
-              OptionItem(id: 'mozzarella',     label: 'Mozzarella rapee',             price: 1.50),
-              OptionItem(id: 'feta',           label: 'Feta',                         price: 1.50),
-              OptionItem(id: 'porc',           label: 'Poitrine de porc fume',        price: 1.50),
-              OptionItem(id: 'chevre',         label: 'Chevre',                       price: 1.50),
-              OptionItem(id: 'legumes',        label: 'Legumes grilles',              price: 1.50),
-              OptionItem(id: 'oeuf',           label: 'Oeuf',                         price: 1.50),
-              OptionItem(id: 'double_cheddar', label: 'Double Cheddar',               price: 3.00),
-              OptionItem(id: 'double_mozza',   label: 'Double Mozzarella rapee',      price: 3.00),
-              OptionItem(id: 'double_porc',    label: 'Double Poitrine de porc fume', price: 3.00),
-            ],
+            items: _supps(),
           ),
           OptionGroup(
             id: 'sauces', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
-            items: [
-              OptionItem(id: 'sans_sauce', label: 'Sans sauce',            price: 0.00),
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison',  price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',               price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',            price: 0.00),
-              OptionItem(id: 'algerienne', label: 'Algerienne',            price: 0.00),
-              OptionItem(id: 'bbq',        label: 'Barbecue',              price: 0.00),
-              OptionItem(id: 'bigburger',  label: 'Big Burger',            price: 0.00),
-              OptionItem(id: 'harissa',    label: 'Harissa',               price: 0.00),
-            ],
+            items: _sauces(),
           ),
           OptionGroup(
-            id: 'formule', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'seul',    label: 'Seul',                     price: 0.00),
-              OptionItem(id: 'frites',  label: 'Avec frites',              price: 1.00),
-              OptionItem(id: 'boisson', label: 'Avec boisson',             price: 1.00),
-              OptionItem(id: 'menu',    label: 'Avec frites et boisson',   price: 2.00),
-            ],
+            id: 'formule', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1,
+            items: _formules(),
           ),
         ]),
-        Product(name: 'Tacos', groups: [
-          OptionGroup(
-            id: 'type_tacos', title: 'Taille', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'm', label: 'M', price: 8.50),
-              OptionItem(id: 'l', label: 'L', price: 10.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'viande_tacos', title: 'Viande', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'kebab',  label: 'Kebab',  price: 0.00),
-              OptionItem(id: 'poulet', label: 'Poulet', price: 0.00),
-              OptionItem(id: 'steak',  label: 'Steak',  price: 0.00),
-              OptionItem(id: 'vege',   label: 'Vegetarien', price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'supp_tacos', title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3,
-            items: [
-              OptionItem(id: 'cheddar',    label: 'Cheddar',          price: 1.50),
-              OptionItem(id: 'mozzarella', label: 'Mozzarella rapee', price: 1.50),
-              OptionItem(id: 'oeuf',       label: 'Oeuf',             price: 1.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
-            items: [
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
-              OptionItem(id: 'algerienne', label: 'Algerienne',           price: 0.00),
-              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
-              OptionItem(id: 'harissa',    label: 'Harissa',              price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'formule_tacos', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'seul',   label: 'Seul',                   price: 0.00),
-              OptionItem(id: 'menu',   label: 'Avec frites et boisson', price: 2.00),
-            ],
-          ),
+
+        // 2) TACOS 1/2/3 VIANDES
+        Product(name: 'Tacos 1 viande', groups: [
+          OptionGroup(id: 'viande1_t1', title: 'Viande 1', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(10.00)),
+          OptionGroup(id: 'supp_t1',   title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
+          OptionGroup(id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _tacosSauces()),
+          OptionGroup(id: 'formule_t1', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
         ]),
+        Product(name: 'Tacos 2 viandes', groups: [
+          OptionGroup(id: 'viande1_t2', title: 'Viande 1', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(12.00)),
+          OptionGroup(id: 'viande2_t2', title: 'Viande 2', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
+          OptionGroup(id: 'supp_t2',   title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
+          OptionGroup(id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _tacosSauces()),
+          OptionGroup(id: 'formule_t2', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
+        ]),
+        Product(name: 'Tacos 3 viandes', groups: [
+          OptionGroup(id: 'viande1_t3', title: 'Viande 1', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(14.00)),
+          OptionGroup(id: 'viande2_t3', title: 'Viande 2', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
+          OptionGroup(id: 'viande3_t3', title: 'Viande 3', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
+          OptionGroup(id: 'supp_t3',   title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
+          OptionGroup(id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _tacosSauces()),
+          OptionGroup(id: 'formule_t3', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
+        ]),
+
+        // 3) BURGERS
         Product(name: 'Burgers', groups: [
           OptionGroup(
             id: 'type_burger', title: 'Burger', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
-              OptionItem(id: 'classic',  label: 'Classic',         price: 7.90),
-              OptionItem(id: 'double',   label: 'Double cheese',   price: 9.90),
-              OptionItem(id: 'chicken',  label: 'Chicken',         price: 8.50),
-              OptionItem(id: 'veggie',   label: 'Veggie',          price: 8.50),
+              OptionItem(id: 'la_biquette',  label: 'La Biquette',  price: 12.00),
+              OptionItem(id: 'le_majestueux',label: 'Le Majestueux',price: 12.00),
+              OptionItem(id: 'totoro',       label: 'TOTORO',       price: 13.00),
             ],
           ),
-          OptionGroup(
-            id: 'sauce_burger', title: 'Sauces', multiple: true, minSelect: 0, maxSelect: 2,
-            items: [
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
-              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'formule_burger', title: 'Formule', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'seul',    label: 'Seul',                    price: 0.00),
-              OptionItem(id: 'frites',  label: 'Avec frites',             price: 1.00),
-              OptionItem(id: 'menu',    label: 'Avec frites et boisson',  price: 2.00),
-            ],
-          ),
+          OptionGroup(id: 'sauce_burger', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _sauces()),
+          OptionGroup(id: 'formule_burger', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
         ]),
-        Product(name: 'Box', groups: [
-          OptionGroup(
-            id: 'type_box', title: 'Choix box', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'tenders6', label: '6 Tenders',  price: 6.50),
-              OptionItem(id: 'nuggets9', label: '9 Nuggets',  price: 7.90),
-              OptionItem(id: 'wings8',   label: '8 Wings',    price: 7.90),
-              OptionItem(id: 'mix12',    label: 'Mix 12 pcs', price: 9.90),
-            ],
-          ),
-          OptionGroup(
-            id: 'sauce_box', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
-            items: [
-              OptionItem(id: 'ketchup', label: 'Ketchup',   price: 0.00),
-              OptionItem(id: 'mayo',    label: 'Mayonnaise',price: 0.00),
-              OptionItem(id: 'bbq',     label: 'Barbecue',  price: 0.00),
-              OptionItem(id: 'blanche', label: 'Sauce blanche maison', price: 0.00),
-            ],
-          ),
-          OptionGroup(
-            id: 'plus_box', title: 'Accompagnement', multiple: true, minSelect: 0, maxSelect: 2,
-            items: [
-              OptionItem(id: 'frites',  label: 'Frites',  price: 2.00),
-              OptionItem(id: 'boisson', label: 'Boisson', price: 1.50),
-            ],
-          ),
-        ]),
+
+        // 5) MENU ENFANT
         Product(name: 'Menu Enfant', groups: [
           OptionGroup(
             id: 'choix_enfant', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
@@ -509,20 +340,12 @@ class _HomeState extends State<Home> {
           OptionGroup(
             id: 'crudites_enfant', title: 'Crudites', multiple: true, minSelect: 0, maxSelect: 3,
             items: [
-              OptionItem(id: 'avec',          label: 'Avec crudites',  price: 0.00),
-              OptionItem(id: 'sans_salade',   label: 'Sans salade',    price: 0.00),
-              OptionItem(id: 'sans_cornichon',label: 'Sans cornichon', price: 0.00),
+              OptionItem(id: 'avec',           label: 'Avec crudites',  price: 0.00),
+              OptionItem(id: 'sans_salade',    label: 'Sans salade',    price: 0.00),
+              OptionItem(id: 'sans_cornichon', label: 'Sans cornichon', price: 0.00),
             ],
           ),
-          OptionGroup(
-            id: 'sauce_enfant', title: 'Sauces', multiple: false, minSelect: 1, maxSelect: 1,
-            items: [
-              OptionItem(id: 'sans_sauce', label: 'Sans sauce',           price: 0.00),
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
-            ],
-          ),
+          OptionGroup(id: 'sauce_enfant', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _sauces()),
           OptionGroup(
             id: 'boisson_enfant', title: 'Boisson', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
@@ -531,37 +354,25 @@ class _HomeState extends State<Home> {
             ],
           ),
         ]),
+
+        // 6) PETIT FAIM
         Product(name: 'Petit Faim', groups: [
           OptionGroup(
             id: 'choix_pf', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
               OptionItem(id: 'frites_p',  label: 'Frites petite portion', price: 3.00),
               OptionItem(id: 'frites_g',  label: 'Frites grande portion', price: 6.00),
-              OptionItem(id: 'tenders3',  label: '3 Tenders', price: 0.00),
-              OptionItem(id: 'tenders6',  label: '6 Tenders', price: 0.00),
-              OptionItem(id: 'nuggets6',  label: '6 Nuggets', price: 0.00),
-              OptionItem(id: 'nuggets12', label: '12 Nuggets', price: 0.00),
+              OptionItem(id: 'tenders3',  label: '3 Tenders',             price: 5.00),
+              OptionItem(id: 'tenders6',  label: '6 Tenders',             price: 10.00),
+              OptionItem(id: 'nuggets6',  label: '6 Nuggets',             price: 4.00),
+              OptionItem(id: 'nuggets12', label: '12 Nuggets',            price: 8.00),
             ],
           ),
-          OptionGroup(
-            id: 'sauce_pf', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
-            items: [
-              OptionItem(id: 'sans_sauce', label: 'Sans sauce',           price: 0.00),
-              OptionItem(id: 'blanche',    label: 'Sauce blanche maison', price: 0.00),
-              OptionItem(id: 'ketchup',    label: 'Ketchup',              price: 0.00),
-              OptionItem(id: 'mayo',       label: 'Mayonnaise',           price: 0.00),
-              OptionItem(id: 'algerienne', label: 'Algerienne',           price: 0.00),
-              OptionItem(id: 'bbq',        label: 'Barbecue',             price: 0.00),
-              OptionItem(id: 'bigburger',  label: 'Big Burger',           price: 0.00),
-              OptionItem(id: 'harissa',    label: 'Harissa',              price: 0.00),
-            ],
-          ),
+          OptionGroup(id: 'sauce_pf', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _sauces()),
         ]),
       ];
 
       app.products.addAll(products);
-      // Tohum ürünleri diske de yaz (uygulamayı kapatınca kalsın)
-      app._saveProducts();
     }
   }
 
@@ -1135,6 +946,7 @@ class _OrderWizardState extends State<OrderWizard> {
     }
   }
 
+  // Menu Enfant: Crudités sadece Cheeseburger seçilirse görünür
   List<OptionGroup> _groupsForVisibility(List<OptionGroup> base) {
     if (widget.product.name != 'Menu Enfant') return base;
 
@@ -1148,32 +960,58 @@ class _OrderWizardState extends State<OrderWizard> {
   }
 
   void _toggleSingle(OptionGroup g, OptionItem it) { picked[g.id] = [it]; setState(() {}); }
+
+  // Çoklu seçim kuralları (crudités / sans sauce / fromagère)
   void _toggleMulti(OptionGroup g, OptionItem it) {
     final list = List<OptionItem>.from(picked[g.id] ?? []);
-    final isCrud = g.id == 'crudites';
-    final isSansCrud = it.id == 'sans_crudites';
 
-    if (isCrud && isSansCrud) {
-      picked[g.id] = [it];
-      setState(() {});
-      return;
+    bool has(String id) => list.any((e) => e.id == id);
+    void removeId(String id) => list.removeWhere((e) => e.id == id);
+
+    // CRUDITES kuralları
+    if (g.id == 'crudites') {
+      if (it.id == 'sans_crudites' || it.id == 'avec_crudites') {
+        picked[g.id] = [it]; setState((){}); return;
+      } else {
+        removeId('sans_crudites');
+        removeId('avec_crudites');
+      }
     }
 
-    final exists = list.any((e) => e.id == it.id);
+    // Tüm "sauce" gruplarında SANS SAUCE tek başına
+    final isAnySauceGroup = g.id.contains('sauce');
+    if (isAnySauceGroup && it.id == 'sans_sauce') {
+      picked[g.id] = [it]; setState((){}); return;
+    }
+    if (isAnySauceGroup) removeId('sans_sauce');
+
+    // TACOS: fromagère özel kuralları
+    if (g.id == 'sauce_tacos') {
+      if (it.id == 'seulement_fromagere') {
+        picked[g.id] = [it]; setState((){}); return;
+      }
+      if (it.id == 'sans_fromagere') {
+        removeId('fromagere');
+        // normal akış devam
+      } else {
+        if (has('sans_fromagere') && it.id == 'fromagere') {
+          setState((){}); return; // yasak
+        }
+        removeId('seulement_fromagere');
+      }
+    }
+
+    final exists = has(it.id);
     if (exists) {
       list.removeWhere((e) => e.id == it.id);
     } else {
-      if (isCrud) {
-        list.removeWhere((e) => e.id == 'sans_crudites');
-      }
-      if (list.length >= g.maxSelect) return;
+      if (list.length >= g.maxSelect) { setState((){}); return; }
       list.add(it);
     }
-
     picked[g.id] = list;
     setState(() {});
   }
-  
+
   bool _validGroup(OptionGroup g) {
     final n = (picked[g.id] ?? const []).length;
     return n >= g.minSelect && n <= g.maxSelect;
@@ -1282,8 +1120,17 @@ class _GroupStep extends StatelessWidget {
     int cross = (size.width / desired).floor().clamp(2, 5);
 
     final selectedList = picked[group.id] ?? const <OptionItem>[];
-    final sansCrudOn = group.id == 'crudites'
-        && selectedList.any((e) => e.id == 'sans_crudites');
+
+    // Seçim durum bayrakları (tile başına değişmeyenler)
+    bool has(String id) => selectedList.any((e) => e.id == id);
+    final crudSans = group.id == 'crudites' && has('sans_crudites');
+    final crudAvec = group.id == 'crudites' && has('avec_crudites');
+
+    final anySauceGroup = group.id.contains('sauce');
+    final sauceSans = anySauceGroup && has('sans_sauce');
+
+    final tacosOnlyFrom = group.id == 'sauce_tacos' && has('seulement_fromagere');
+    final tacosNoFrom   = group.id == 'sauce_tacos' && has('sans_fromagere');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1305,13 +1152,19 @@ class _GroupStep extends StatelessWidget {
               crossAxisCount: cross,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 1, // KARE
+              childAspectRatio: 1,
             ),
             itemCount: group.items.length,
             itemBuilder: (_, i) {
               final it = group.items[i];
               final isSelected = selectedList.any((e) => e.id == it.id);
-              final disabled = sansCrudOn && it.id != 'sans_crudites';
+
+              final disabled =
+                  (crudSans && it.id != 'sans_crudites') ||
+                  (crudAvec && it.id != 'avec_crudites') ||
+                  (sauceSans && it.id != 'sans_sauce') ||
+                  (tacosOnlyFrom && it.id != 'seulement_fromagere') ||
+                  (tacosNoFrom && it.id == 'fromagere');
 
               void onTap() {
                 if (group.multiple) {
@@ -1364,8 +1217,7 @@ class _GroupStep extends StatelessWidget {
                         ),
                         Center(
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -1374,19 +1226,13 @@ class _GroupStep extends StatelessWidget {
                                   textAlign: TextAlign.center,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 6),
                                 if (it.price != 0)
                                   Text(
                                     '+ ${_formatEuro(it.price)}',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: color.onSurfaceVariant,
-                                    ),
+                                    style: TextStyle(fontSize: 14, color: color.onSurfaceVariant),
                                     textAlign: TextAlign.center,
                                   ),
                               ],
@@ -1692,7 +1538,7 @@ class OrdersPage extends StatelessWidget {
                             try {
                               await printOrderAndroid(o);
                               if (context.mounted) {
-                                Navigator.pop(context); // Diyalogu kapat
+                                Navigator.pop(context);
                                 _snack(context, 'Fiş yazıcıya gönderildi.');
                               }
                             } catch (e) {
@@ -1830,11 +1676,12 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 }
 
 // ==================================================
-// PAKETSİZ YAZDIRMA
+// ESCP/RAW yazdırma yardımcıları
 // ==================================================
-
 String _two(int n) => n.toString().padLeft(2, '0');
-String _money(double v) => '${v.toStringAsFixed(2).replaceAll(".", ",")} €';
+String _formatEuro(double v) => '€${v.toStringAsFixed(2)}';
+
+String _money(double v) => '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
 
 String _rightLine(String left, String right, {int width = 32}) {
   left = left.replaceAll('\n', ' ');
@@ -1856,8 +1703,8 @@ void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
 void _writeCp1252(Socket socket, String text) {
   final out = <int>[];
   for (final r in text.runes) {
-    if (r == 0x20AC) { out.add(0x80); continue; } // €
-    if (r <= 0x7F) { out.add(r); continue; }       // ASCII
+    if (r == 0x20AC) { out.add(0x80); continue; }          // €
+    if (r <= 0x7F)   { out.add(r); continue; }             // ASCII
     final ch = String.fromCharCode(r);
     const repl = {
       'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
@@ -1876,8 +1723,8 @@ void _writeCp1252(Socket socket, String text) {
 Future<void> printOrderAndroid(SavedOrder o) async {
   final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  _cmd(socket, [27, 64]);       // init
-  _cmd(socket, [27, 116, 16]);  // codepage
+  _cmd(socket, [27, 64]);         // init
+  _cmd(socket, [27, 116, 16]);    // codepage (CP1252 genelde 16)
 
   _alignCenter(socket);
   _size(socket, 17);
@@ -1928,10 +1775,8 @@ Future<void> printOrderAndroid(SavedOrder o) async {
   _size(socket, 0);
   _boldOff(socket);
 
-  _cmd(socket, [10, 10, 29, 86, 66, 0]); // feed + partial cut
+  _cmd(socket, [10, 10, 29, 86, 66, 0]); // feed + kes
 
   await socket.flush();
   await socket.close();
 }
-
-String _formatEuro(double v) => '€${v.toStringAsFixed(2)}';
