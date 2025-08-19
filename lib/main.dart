@@ -368,27 +368,24 @@ class _HomeState extends State<Home> {
           ),
         ]),
 
-        // 2) TACOS 1/2/3 VIANDES
-        Product(name: 'Tacos 1 viande', groups: [
-          OptionGroup(id: 'viande1_t1', title: 'Viande 1', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(10.00)),
-          OptionGroup(id: 'supp_t1',    title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
-          OptionGroup(id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _tacosSauces()),
-          OptionGroup(id: 'formule_t1', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
-        ]),
-        Product(name: 'Tacos 2 viandes', groups: [
-          OptionGroup(id: 'viande1_t2', title: 'Viande 1', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(12.00)),
-          OptionGroup(id: 'viande2_t2', title: 'Viande 2', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
-          OptionGroup(id: 'supp_t2',    title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
-          OptionGroup(id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _tacosSauces()),
-          OptionGroup(id: 'formule_t2', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
-        ]),
-        Product(name: 'Tacos 3 viandes', groups: [
-          OptionGroup(id: 'viande1_t3', title: 'Viande 1', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(14.00)),
-          OptionGroup(id: 'viande2_t3', title: 'Viande 2', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
-          OptionGroup(id: 'viande3_t3', title: 'Viande 3', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
-          OptionGroup(id: 'supp_t3',    title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
-          OptionGroup(id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _tacosSauces()),
-          OptionGroup(id: 'formule_t3', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
+        // -- Tacos (tek kart)
+        Product(name: 'Tacos', groups: [
+          OptionGroup(
+            id: 'type_tacos', title: 'Taille', multiple: false, minSelect: 1, maxSelect: 1,
+            items: [
+              OptionItem(id: 't1', label: '1 viande',  price: 10.00),
+              OptionItem(id: 't2', label: '2 viandes', price: 12.00),
+              OptionItem(id: 't3', label: '3 viandes', price: 14.00),
+            ],
+          ),
+          // Et seçimleri (tamamı 0 € — temel fiyat "type_tacos"tan geliyor)
+          OptionGroup(id: 'viande1', title: 'Viande 1', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
+          OptionGroup(id: 'viande2', title: 'Viande 2', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
+          OptionGroup(id: 'viande3', title: 'Viande 3', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
+
+          OptionGroup(id: 'supp_tacos',  title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
+          OptionGroup(id: 'sauce_tacos', title: 'Sauces',      multiple: true, minSelect: 1, maxSelect: 2, items: _tacosSauces()),
+          OptionGroup(id: 'formule_tacos', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
         ]),
 
         // 3) BURGERS
@@ -1023,57 +1020,102 @@ class _OrderWizardState extends State<OrderWizard> {
     }
   }
 
-  // Menu Enfant: Crudités sadece Cheeseburger seçilirse görünür
   List<OptionGroup> _groupsForVisibility(List<OptionGroup> base) {
-    if (widget.product.name != 'Menu Enfant') return base;
+    // Menu Enfant kuralı (eski kuralı koru)
+    if (widget.product.name == 'Menu Enfant') {
+      final cheese = (picked['choix_enfant'] ?? const <OptionItem>[])
+          .any((it) => it.id == 'cheese_menu');
+      return base.where((g) {
+        if (g.id == 'crudites_enfant') return cheese;
+        return true;
+      }).toList();
+    }
 
-    final cheeseSecildiMi =
-        (picked['choix_enfant'] ?? const <OptionItem>[]).any((it) => it.id == 'cheese_menu');
+    // Tacos kuralı
+    if (widget.product.name == 'Tacos') {
+      String sel(String gid) {
+        final l = picked[gid];
+        return (l == null || l.isEmpty) ? '' : l.first.id;
+      }
+      final t = sel('type_tacos'); // t1 / t2 / t3
+      return base.where((g) {
+        if (g.id == 'viande2') return t == 't2' || t == 't3';
+        if (g.id == 'viande3') return t == 't3';
+        return true;
+      }).toList();
+    }
 
-    return base.where((g) {
-      if (g.id == 'crudites_enfant') return cheeseSecildiMi;
-      return true;
-    }).toList();
+    return base;
   }
 
   void _toggleSingle(OptionGroup g, OptionItem it) { picked[g.id] = [it]; setState(() {}); }
 
-  // Çoklu seçim kuralları (crudités / sans sauce / fromagère)
   void _toggleMulti(OptionGroup g, OptionItem it) {
     final list = List<OptionItem>.from(picked[g.id] ?? []);
-    final isCrud = g.id == 'crudites';
+    bool isCrud = g.id == 'crudites';
+    bool isSauceGroup = g.id == 'sauces' ||
+                        g.id == 'sauce_burger' ||
+                        g.id == 'sauce_pf' ||
+                        g.id == 'sauce_enfant';
+    bool isTacosSauce = g.id == 'sauce_tacos';
 
-    bool isSans(String id) => id == 'sans_crudites';
-    bool isAvec(String id) => id == 'avec_crudites' || id == 'avec'; // id'ni hangisini kullandıysan
+    bool exists = list.any((e) => e.id == it.id);
 
-    final exists = list.any((e) => e.id == it.id);
-
-    // ÖZEL: Sans/Avec tek başına çalışsın ama tekrar dokununca kaldırılsın
-    if (isCrud && (isSans(it.id) || isAvec(it.id))) {
-      if (exists) {
-        // seçiliyse kaldır
-        list.removeWhere((e) => e.id == it.id);
-        picked[g.id] = list;
-      } else {
-        // değilse sadece kendisi kalsın
-        picked[g.id] = [it];
-      }
-      setState(() {});
-      return;
+    // --- CRUDITES özel: Avec/Sans tek başına ama tekrar dokununca kaldır ---
+    bool isSansCrud = it.id == 'sans_crudites';
+    bool isAvecCrud = it.id == 'avec_crudites' || it.id == 'avec';
+    if (isCrud && (isSansCrud || isAvecCrud)) {
+      if (exists) { list.removeWhere((e) => e.id == it.id); picked[g.id] = list; }
+      else { picked[g.id] = [it]; }
+      setState((){}); return;
     }
-
-    // ÖZEL: Normal bir maddeye tıklanıyorsa, varsa sans/avec'i temizle
     if (isCrud) {
-      list.removeWhere((e) => isSans(e.id) || isAvec(e.id));
+      list.removeWhere((e) => e.id == 'sans_crudites' || e.id == 'avec_crudites' || e.id == 'avec');
     }
 
+    // --- Genel sos grupları: 'sans_sauce' tek başına ---
+    if (isSauceGroup) {
+      if (it.id == 'sans_sauce') {
+        if (exists) list.removeWhere((e) => e.id == 'sans_sauce');
+        else picked[g.id] = [it];
+        setState((){}); return;
+      } else {
+        list.removeWhere((e) => e.id == 'sans_sauce');
+      }
+    }
+
+    // --- Tacos sos kuralları ---
+    if (isTacosSauce) {
+      if (it.id == 'sans_sauce' || it.id == 'seulement_fromagere') {
+        if (exists) list.removeWhere((e) => e.id == it.id);
+        else { picked[g.id] = [it]; setState((){}); return; }
+        picked[g.id] = list; setState((){}); return;
+      }
+      if (it.id == 'fromagere') {
+        // 'sans_fromagere' seçiliyken fromagere'a izin verme
+        if (list.any((e) => e.id == 'sans_fromagere')) return;
+      }
+      if (it.id == 'sans_fromagere') {
+        if (exists) {
+          list.removeWhere((e) => e.id == 'sans_fromagere');
+        } else {
+          list.removeWhere((e) => e.id == 'fromagere' || e.id == 'seulement_fromagere' || e.id == 'sans_sauce');
+          if (list.length >= g.maxSelect) { setState((){}); return; }
+          list.add(it);
+        }
+        picked[g.id] = list; setState((){}); return;
+      }
+      // başka bir sos seçiliyorsa 'sans_sauce' ve 'seulement_fromagere' temizle
+      list.removeWhere((e) => e.id == 'sans_sauce' || e.id == 'seulement_fromagere');
+    }
+
+    // --- standart çoklu toggle ---
     if (exists) {
       list.removeWhere((e) => e.id == it.id);
     } else {
-      if (list.length >= g.maxSelect) return;
+      if (list.length >= g.maxSelect) { setState((){}); return; }
       list.add(it);
     }
-
     picked[g.id] = list;
     setState(() {});
   }
