@@ -4,17 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /* =======================
-    Sabitler
-    ======================= */
+    Sabitler
+    ======================= */
 // LÜTFEN BU IP ADRESİNİ KENDİ YAZICINIZIN IP ADRESİYLE DEĞİŞTİRİN
 const String PRINTER_IP = '192.168.1.1'; // <-- Epson yazıcının IP'si
-const int PRINTER_PORT = 9100; // Genelde 9100 (RAW)
+const int    PRINTER_PORT = 9100;       // Genelde 9100 (RAW)
 
 const String _ADMIN_PIN = '6538';
 
 /* =======================
-    ENTRY
-    ======================= */
+    ENTRY
+    ======================= */
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final appState = AppState();
@@ -36,8 +36,8 @@ class App extends StatelessWidget {
 }
 
 /* =======================
-    MODELLER & STATE
-    ======================= */
+    MODELLER & STATE
+    ======================= */
 class Product {
   String name;
   final List<OptionGroup> groups;
@@ -53,15 +53,13 @@ class Product {
   }
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'groups': groups.map((g) => g.toJson()).toList(),
-      };
+    'name': name,
+    'groups': groups.map((g) => g.toJson()).toList(),
+  };
   factory Product.fromJson(Map<String, dynamic> j) => Product(
-        name: j['name'],
-        groups: (j['groups'] as List? ?? [])
-            .map((e) => OptionGroup.fromJson(Map<String, dynamic>.from(e)))
-            .toList(),
-      );
+    name: j['name'],
+    groups: (j['groups'] as List? ?? []).map((e) => OptionGroup.fromJson(Map<String,dynamic>.from(e))).toList(),
+  );
 }
 
 class OptionGroup {
@@ -81,23 +79,16 @@ class OptionGroup {
   }) : items = items ?? [];
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'multiple': multiple,
-        'min': minSelect,
-        'max': maxSelect,
-        'items': items.map((e) => e.toJson()).toList(),
-      };
+    'id': id, 'title': title, 'multiple': multiple,
+    'min': minSelect, 'max': maxSelect,
+    'items': items.map((e) => e.toJson()).toList(),
+  };
   factory OptionGroup.fromJson(Map<String, dynamic> j) => OptionGroup(
-        id: j['id'],
-        title: j['title'],
-        multiple: j['multiple'] ?? false,
-        minSelect: j['min'] ?? 0,
-        maxSelect: j['max'] ?? 1,
-        items: (j['items'] as List? ?? [])
-            .map((e) => OptionItem.fromJson(Map<String, dynamic>.from(e)))
-            .toList(),
-      );
+    id: j['id'], title: j['title'],
+    multiple: j['multiple'] ?? false,
+    minSelect: j['min'] ?? 0, maxSelect: j['max'] ?? 1,
+    items: (j['items'] as List? ?? []).map((e) => OptionItem.fromJson(Map<String,dynamic>.from(e))).toList(),
+  );
 }
 
 class OptionItem {
@@ -118,20 +109,18 @@ class CartLine {
   double get total => product.priceForSelection(picked);
 
   Map<String, dynamic> toJson() => {
-        'product': product.toJson(),
-        'picked': {
-          for (final e in picked.entries) e.key: e.value.map((it) => it.toJson()).toList()
-        },
-      };
+    'product': product.toJson(),
+    'picked': {
+      for (final e in picked.entries) e.key: e.value.map((it) => it.toJson()).toList()
+    },
+  };
   factory CartLine.fromJson(Map<String, dynamic> j) => CartLine(
-        product: Product.fromJson(Map<String, dynamic>.from(j['product'])),
-        picked: {
-          for (final e in (j['picked'] as Map).entries)
-            e.key: (e.value as List)
-                .map((x) => OptionItem.fromJson(Map<String, dynamic>.from(x)))
-                .toList()
-        },
-      );
+    product: Product.fromJson(Map<String, dynamic>.from(j['product'])),
+    picked: {
+      for (final e in (j['picked'] as Map).entries)
+        e.key: (e.value as List).map((x) => OptionItem.fromJson(Map<String,dynamic>.from(x))).toList()
+    },
+  );
 }
 
 class SavedOrder {
@@ -151,21 +140,19 @@ class SavedOrder {
   double get total => lines.fold(0.0, (s, l) => s + l.total);
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'createdAt': createdAt.toIso8601String(),
-        'readyAt': readyAt.toIso8601String(),
-        'customer': customer,
-        'lines': lines.map((l) => l.toJson()).toList(),
-      };
+    'id': id,
+    'createdAt': createdAt.toIso8601String(),
+    'readyAt': readyAt.toIso8601String(),
+    'customer': customer,
+    'lines': lines.map((l) => l.toJson()).toList(),
+  };
   factory SavedOrder.fromJson(Map<String, dynamic> j) => SavedOrder(
-        id: j['id'],
-        createdAt: DateTime.parse(j['createdAt']),
-        readyAt: DateTime.parse(j['readyAt']),
-        customer: j['customer'] ?? '',
-        lines: (j['lines'] as List)
-            .map((e) => CartLine.fromJson(Map<String, dynamic>.from(e)))
-            .toList(),
-      );
+    id: j['id'],
+    createdAt: DateTime.parse(j['createdAt']),
+    readyAt: DateTime.parse(j['readyAt']),
+    customer: j['customer'] ?? '',
+    lines: (j['lines'] as List).map((e) => CartLine.fromJson(Map<String,dynamic>.from(e))).toList(),
+  );
 }
 
 class AppState extends ChangeNotifier {
@@ -187,7 +174,7 @@ class AppState extends ChangeNotifier {
       final list = jsonDecode(raw) as List;
       orders
         ..clear()
-        ..addAll(list.map((e) => SavedOrder.fromJson(Map<String, dynamic>.from(e))));
+        ..addAll(list.map((e) => SavedOrder.fromJson(Map<String,dynamic>.from(e))));
       notifyListeners();
     }
   }
@@ -206,35 +193,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addProduct(Product p) {
-    products.add(p);
-    notifyListeners();
-  }
-
-  void replaceProductAt(int i, Product p) {
-    products[i] = p;
-    notifyListeners();
-  }
+  void addProduct(Product p) { products.add(p); notifyListeners(); }
+  void replaceProductAt(int i, Product p) { products[i] = p; notifyListeners(); }
 
   void addLineToCart(Product p, Map<String, List<OptionItem>> picked) {
-    final deep = {
-      for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
-    };
+    final deep = { for (final e in picked.entries) e.key: List<OptionItem>.from(e.value) };
     cart.add(CartLine(product: p, picked: deep));
     notifyListeners();
   }
-
-  void removeCartLineAt(int i) {
-    if (i >= 0 && i < cart.length) {
-      cart.removeAt(i);
-      notifyListeners();
-    }
-  }
-
-  void clearCart() {
-    cart.clear();
-    notifyListeners();
-  }
+  void removeCartLineAt(int i) { if (i>=0 && i<cart.length) { cart.removeAt(i); notifyListeners(); } }
+  void clearCart() { cart.clear(); notifyListeners(); }
 
   void updateCartLineAt(int i, Map<String, List<OptionItem>> picked) {
     if (i < 0 || i >= cart.length) return;
@@ -248,16 +216,12 @@ class AppState extends ChangeNotifier {
 
   void finalizeCartToOrder({required String customer}) {
     if (cart.isEmpty) return;
-    final deepLines = cart
-        .map((l) => CartLine(
-              product: l.product,
-              picked: {
-                for (final e in l.picked.entries) e.key: List<OptionItem>.from(e.value)
-              },
-            ))
-        .toList();
+    final deepLines = cart.map((l) => CartLine(
+      product: l.product,
+      picked: { for (final e in l.picked.entries) e.key: List<OptionItem>.from(e.value) },
+    )).toList();
 
-    final now = DateTime.now();
+    final now   = DateTime.now();
     final ready = now.add(Duration(minutes: prepMinutes));
 
     orders.add(SavedOrder(
@@ -271,7 +235,6 @@ class AppState extends ChangeNotifier {
     _saveOrders(); // << EKLENDİ
     notifyListeners();
   }
-
   void clearOrders() {
     orders.clear();
     _saveOrders(); // << EKLENDİ
@@ -281,54 +244,53 @@ class AppState extends ChangeNotifier {
 
 /* Ortak listeler (menü data helpers) */
 List<OptionItem> _meats(double base) => [
-      OptionItem(id: 'kebab', label: 'Kebab', price: base),
-      OptionItem(id: 'steak', label: 'Steak hache maison', price: base),
-      OptionItem(id: 'poulet_curry', label: 'Poulet curry maison', price: base),
-      OptionItem(id: 'tenders', label: 'Tenders', price: base),
-      OptionItem(id: 'cordon', label: 'Cordon bleu', price: base),
-      OptionItem(id: 'nuggets', label: 'Nuggets', price: base),
-    ];
+  OptionItem(id: 'kebab',        label: 'Kebab',                  price: base),
+  OptionItem(id: 'steak',        label: 'Steak hache maison',     price: base),
+  OptionItem(id: 'poulet_curry', label: 'Poulet curry maison',    price: base),
+  OptionItem(id: 'tenders',      label: 'Tenders',                price: base),
+  OptionItem(id: 'cordon',       label: 'Cordon bleu',            price: base),
+  OptionItem(id: 'nuggets',      label: 'Nuggets',                price: base),
+];
 
 List<OptionItem> _supps() => [
-      OptionItem(id: 'cheddar', label: 'Cheddar', price: 1.50),
-      OptionItem(id: 'mozza', label: 'Mozzarella rapee', price: 1.50),
-      OptionItem(id: 'feta', label: 'Feta', price: 1.50),
-      OptionItem(id: 'porc', label: 'Poitrine de porc fume', price: 1.50),
-      OptionItem(id: 'chevre', label: 'Chevre', price: 1.50),
-      OptionItem(id: 'legumes', label: 'Legumes grilles', price: 1.50),
-      OptionItem(id: 'oeuf', label: 'Oeuf', price: 1.50),
-      OptionItem(id: 'd_cheddar', label: 'Double Cheddar', price: 3.00),
-      OptionItem(id: 'd_mozza', label: 'Double Mozzarella rapee', price: 3.00),
-      OptionItem(id: 'd_porc', label: 'Double Poitrine de porc fume', price: 3.00),
-    ];
+  OptionItem(id: 'cheddar',   label: 'Cheddar',                     price: 1.50),
+  OptionItem(id: 'mozza',     label: 'Mozzarella rapee',            price: 1.50),
+  OptionItem(id: 'feta',      label: 'Feta',                        price: 1.50),
+  OptionItem(id: 'porc',      label: 'Poitrine de porc fume',       price: 1.50),
+  OptionItem(id: 'chevre',    label: 'Chevre',                      price: 1.50),
+  OptionItem(id: 'legumes',   label: 'Legumes grilles',             price: 1.50),
+  OptionItem(id: 'oeuf',      label: 'Oeuf',                        price: 1.50),
+  OptionItem(id: 'd_cheddar', label: 'Double Cheddar',              price: 3.00),
+  OptionItem(id: 'd_mozza',   label: 'Double Mozzarella rapee',     price: 3.00),
+  OptionItem(id: 'd_porc',    label: 'Double Poitrine de porc fume',price: 3.00),
+];
 
 List<OptionItem> _sauces() => [
-      OptionItem(id: 'sans_sauce', label: 'Sans sauce', price: 0.00),
-      OptionItem(id: 'blanche', label: 'Sauce blanche maison', price: 0.00),
-      OptionItem(id: 'ketchup', label: 'Ketchup', price: 0.00),
-      OptionItem(id: 'mayo', label: 'Mayonnaise', price: 0.00),
-      OptionItem(id: 'algerienne', label: 'Algerienne', price: 0.00),
-      OptionItem(id: 'bbq', label: 'Barbecue', price: 0.00),
-      OptionItem(id: 'bigburger', label: 'Big Burger', price: 0.00),
-      OptionItem(id: 'harissa', label: 'Harissa', price: 0.00),
-    ];
+  OptionItem(id: 'sans_sauce', label: 'Sans sauce',           price: 0.00),
+  OptionItem(id: 'blanche',    label: 'Sauce blanche maison',   price: 0.00),
+  OptionItem(id: 'ketchup',    label: 'Ketchup',                price: 0.00),
+  OptionItem(id: 'mayo',       label: 'Mayonnaise',             price: 0.00),
+  OptionItem(id: 'algerienne', label: 'Algerienne',             price: 0.00),
+  OptionItem(id: 'bbq',        label: 'Barbecue',               price: 0.00),
+  OptionItem(id: 'bigburger',  label: 'Big Burger',             price: 0.00),
+  OptionItem(id: 'harissa',    label: 'Harissa',                price: 0.00),
+];
 
 // Tacos’a özel sos seçenekleri
 List<OptionItem> _tacosSauces() => [
-      ..._sauces(),
-      OptionItem(id: 'fromagere', label: 'Sauce fromagere', price: 0.00),
-      OptionItem(
-          id: 'seulement_fromagere', label: 'Seulement sauce fromagere', price: 0.00),
-      OptionItem(id: 'sans_fromagere', label: 'Sans sauce fromagere', price: 0.00),
-    ];
+  ..._sauces(),
+  OptionItem(id: 'fromagere',           label: 'Sauce fromagere',           price: 0.00),
+  OptionItem(id: 'seulement_fromagere', label: 'Seulement sauce fromagere', price: 0.00),
+  OptionItem(id: 'sans_fromagere',      label: 'Sans sauce fromagere',      price: 0.00),
+];
 
 // Ortak formüller
 List<OptionItem> _formules() => [
-      OptionItem(id: 'seul', label: 'Seul', price: 0.00),
-      OptionItem(id: 'frites', label: 'Avec frites', price: 1.00),
-      OptionItem(id: 'boisson', label: 'Avec boisson', price: 1.00),
-      OptionItem(id: 'menu', label: 'Avec frites et boisson', price: 2.00),
-    ];
+  OptionItem(id: 'seul',    label: 'Seul',                    price: 0.00),
+  OptionItem(id: 'frites',  label: 'Avec frites',             price: 1.00),
+  OptionItem(id: 'boisson', label: 'Avec boisson',            price: 1.00),
+  OptionItem(id: 'menu',    label: 'Avec frites et boisson',  price: 2.00),
+];
 
 /* InheritedNotifier: global state erişimi */
 class AppScope extends InheritedNotifier<AppState> {
@@ -342,8 +304,8 @@ class AppScope extends InheritedNotifier<AppState> {
 }
 
 /* =======================
-    HOME (4 sekme)
-    ======================= */
+    HOME (4 sekme)
+    ======================= */
 class Home extends StatefulWidget {
   const Home({super.key});
   @override
@@ -366,66 +328,42 @@ class _HomeState extends State<Home> {
         // 1) SANDWICH
         Product(name: 'Sandwich', groups: [
           OptionGroup(
-            id: 'type_sand',
-            title: 'Sandwich',
-            multiple: false,
-            minSelect: 1,
-            maxSelect: 1,
+            id: 'type_sand', title: 'Sandwich', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
-              OptionItem(id: 'kebab', label: 'Kebab', price: 10.00),
-              OptionItem(id: 'curryosite', label: 'La Curryosite', price: 10.00),
-              OptionItem(id: 'vege', label: 'Vegetarien', price: 10.00),
-              OptionItem(id: 'berlineur', label: 'Berlineur', price: 12.00),
+              OptionItem(id: 'kebab',       label: 'Kebab',         price: 10.00),
+              OptionItem(id: 'curryosite',  label: 'La Curryosite', price: 10.00),
+              OptionItem(id: 'vege',        label: 'Vegetarien',    price: 10.00),
+              OptionItem(id: 'berlineur',   label: 'Berlineur',     price: 12.00),
             ],
           ),
           OptionGroup(
-            id: 'pain',
-            title: 'Pain',
-            multiple: false,
-            minSelect: 1,
-            maxSelect: 1,
+            id: 'pain', title: 'Pain', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
-              OptionItem(id: 'pita', label: 'Pain pita', price: 0.00),
-              OptionItem(id: 'galette', label: 'Galette', price: 0.00),
+              OptionItem(id: 'pita',    label: 'Pain pita', price: 0.00),
+              OptionItem(id: 'galette', label: 'Galette',   price: 0.00),
             ],
           ),
           OptionGroup(
-            id: 'crudites',
-            title: 'Crudites / Retirer',
-            multiple: true,
-            minSelect: 0,
-            maxSelect: 4,
+            id: 'crudites', title: 'Crudites / Retirer', multiple: true, minSelect: 0, maxSelect: 4,
             items: [
-              OptionItem(id: 'avec_crudites', label: 'Avec crudités', price: 0.00),
-              OptionItem(id: 'sans_crudites', label: 'Sans crudites', price: 0.00),
-              OptionItem(id: 'sans_tomates', label: 'Sans tomates', price: 0.00),
-              OptionItem(id: 'sans_salade', label: 'Sans salade', price: 0.00),
-              OptionItem(id: 'sans_oignons', label: 'Sans oignons', price: 0.00),
+              OptionItem(id: 'avec_crudites',   label: 'Avec crudités',   price: 0.00),
+              OptionItem(id: 'sans_crudites',   label: 'Sans crudites',   price: 0.00),
+              OptionItem(id: 'sans_tomates',    label: 'Sans tomates',    price: 0.00),
+              OptionItem(id: 'sans_salade',     label: 'Sans salade',     price: 0.00),
+              OptionItem(id: 'sans_oignons',    label: 'Sans oignons',    price: 0.00),
               OptionItem(id: 'sans_cornichons', label: 'Sans cornichons', price: 0.00),
             ],
           ),
           OptionGroup(
-            id: 'supp',
-            title: 'Supplements',
-            multiple: true,
-            minSelect: 0,
-            maxSelect: 3,
+            id: 'supp', title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3,
             items: _supps(),
           ),
           OptionGroup(
-            id: 'sauces',
-            title: 'Sauces',
-            multiple: true,
-            minSelect: 1,
-            maxSelect: 2,
+            id: 'sauces', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
             items: _sauces(),
           ),
           OptionGroup(
-            id: 'formule',
-            title: 'Accompagnement',
-            multiple: false,
-            minSelect: 1,
-            maxSelect: 1,
+            id: 'formule', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1,
             items: _formules(),
           ),
         ]),
@@ -433,132 +371,57 @@ class _HomeState extends State<Home> {
         // -- Tacos (tek kart)
         Product(name: 'Tacos', groups: [
           OptionGroup(
-            id: 'type_tacos',
-            title: 'Taille',
-            multiple: false,
-            minSelect: 1,
-            maxSelect: 1,
+            id: 'type_tacos', title: 'Taille', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
-              OptionItem(id: 't1', label: '1 viande', price: 10.00),
+              OptionItem(id: 't1', label: '1 viande',  price: 10.00),
               OptionItem(id: 't2', label: '2 viandes', price: 12.00),
               OptionItem(id: 't3', label: '3 viandes', price: 14.00),
             ],
           ),
           // Et seçimleri (tamamı 0 € — temel fiyat "type_tacos"tan geliyor)
-          OptionGroup(
-              id: 'viande1',
-              title: 'Viande 1',
-              multiple: false,
-              minSelect: 1,
-              maxSelect: 1,
-              items: _meats(0.00)),
-          OptionGroup(
-              id: 'viande2',
-              title: 'Viande 2',
-              multiple: false,
-              minSelect: 1,
-              maxSelect: 1,
-              items: _meats(0.00)),
-          OptionGroup(
-              id: 'viande3',
-              title: 'Viande 3',
-              multiple: false,
-              minSelect: 1,
-              maxSelect: 1,
-              items: _meats(0.00)),
+          OptionGroup(id: 'viande1', title: 'Viande 1', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
+          OptionGroup(id: 'viande2', title: 'Viande 2', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
+          OptionGroup(id: 'viande3', title: 'Viande 3', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
 
-          OptionGroup(
-              id: 'supp_tacos',
-              title: 'Supplements',
-              multiple: true,
-              minSelect: 0,
-              maxSelect: 3,
-              items: _supps()),
-          OptionGroup(
-              id: 'sauce_tacos',
-              title: 'Sauces',
-              multiple: true,
-              minSelect: 1,
-              maxSelect: 2,
-              items: _tacosSauces()),
-          OptionGroup(
-              id: 'formule_tacos',
-              title: 'Accompagnement',
-              multiple: false,
-              minSelect: 1,
-              maxSelect: 1,
-              items: _formules()),
+          OptionGroup(id: 'supp_tacos',  title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
+          OptionGroup(id: 'sauce_tacos', title: 'Sauces',      multiple: true, minSelect: 1, maxSelect: 2, items: _tacosSauces()),
+          OptionGroup(id: 'formule_tacos', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
         ]),
 
         // 3) BURGERS
         Product(name: 'Burgers', groups: [
           OptionGroup(
-            id: 'type_burger',
-            title: 'Burger',
-            multiple: false,
-            minSelect: 1,
-            maxSelect: 1,
+            id: 'type_burger', title: 'Burger', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
-              OptionItem(id: 'la_biquette', label: 'La Biquette', price: 12.00),
-              OptionItem(id: 'le_majestueux', label: 'Le Majestueux', price: 12.00),
-              OptionItem(id: 'totoro', label: 'TOTORO', price: 13.00),
+              OptionItem(id: 'la_biquette',  label: 'La Biquette',  price: 12.00),
+              OptionItem(id: 'le_majestueux',label: 'Le Majestueux',price: 12.00),
+              OptionItem(id: 'totoro',       label: 'TOTORO',       price: 13.00),
             ],
           ),
-          OptionGroup(
-              id: 'sauce_burger',
-              title: 'Sauces',
-              multiple: true,
-              minSelect: 1,
-              maxSelect: 2,
-              items: _sauces()),
-          OptionGroup(
-              id: 'formule_burger',
-              title: 'Accompagnement',
-              multiple: false,
-              minSelect: 1,
-              maxSelect: 1,
-              items: _formules()),
+          OptionGroup(id: 'sauce_burger', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _sauces()),
+          OptionGroup(id: 'formule_burger', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
         ]),
 
         // 5) MENU ENFANT
         Product(name: 'Menu Enfant', groups: [
           OptionGroup(
-            id: 'choix_enfant',
-            title: 'Choix',
-            multiple: false,
-            minSelect: 1,
-            maxSelect: 1,
+            id: 'choix_enfant', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
-              OptionItem(
-                  id: 'cheese_menu', label: 'Cheeseburger avec frites', price: 7.90),
-              OptionItem(id: 'nuggets_menu', label: '5 Nuggets et frites', price: 7.90),
+              OptionItem(id: 'cheese_menu',  label: 'Cheeseburger avec frites', price: 7.90),
+              OptionItem(id: 'nuggets_menu', label: '5 Nuggets et frites',      price: 7.90),
             ],
           ),
           OptionGroup(
-            id: 'crudites_enfant',
-            title: 'Crudites',
-            multiple: true,
-            minSelect: 0,
-            maxSelect: 3,
+            id: 'crudites_enfant', title: 'Crudites', multiple: true, minSelect: 0, maxSelect: 3,
             items: [
-              OptionItem(id: 'avec', label: 'Avec crudites', price: 0.00),
-              OptionItem(id: 'sans_salade', label: 'Sans salade', price: 0.00),
+              OptionItem(id: 'avec',           label: 'Avec crudites',  price: 0.00),
+              OptionItem(id: 'sans_salade',    label: 'Sans salade',    price: 0.00),
               OptionItem(id: 'sans_cornichon', label: 'Sans cornichon', price: 0.00),
             ],
           ),
+          OptionGroup(id: 'sauce_enfant', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _sauces()),
           OptionGroup(
-              id: 'sauce_enfant',
-              title: 'Sauces',
-              multiple: true,
-              minSelect: 1,
-              maxSelect: 2,
-              items: _sauces()),
-          OptionGroup(
-            id: 'boisson_enfant',
-            title: 'Boisson',
-            multiple: false,
-            minSelect: 1,
-            maxSelect: 1,
+            id: 'boisson_enfant', title: 'Boisson', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
               OptionItem(id: 'sans_boisson', label: 'Sans boisson', price: 0.00),
               OptionItem(id: 'avec_boisson', label: 'Avec boisson', price: 1.00),
@@ -569,27 +432,17 @@ class _HomeState extends State<Home> {
         // 6) PETIT FAIM
         Product(name: 'Petit Faim', groups: [
           OptionGroup(
-            id: 'choix_pf',
-            title: 'Choix',
-            multiple: false,
-            minSelect: 1,
-            maxSelect: 1,
+            id: 'choix_pf', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
-              OptionItem(id: 'frites_p', label: 'Frites petite portion', price: 3.00),
-              OptionItem(id: 'frites_g', label: 'Frites grande portion', price: 6.00),
-              OptionItem(id: 'tenders3', label: '3 Tenders', price: 5.00),
-              OptionItem(id: 'tenders6', label: '6 Tenders', price: 10.00),
-              OptionItem(id: 'nuggets6', label: '6 Nuggets', price: 4.00),
-              OptionItem(id: 'nuggets12', label: '12 Nuggets', price: 8.00),
+              OptionItem(id: 'frites_p',  label: 'Frites petite portion', price: 3.00),
+              OptionItem(id: 'frites_g',  label: 'Frites grande portion', price: 6.00),
+              OptionItem(id: 'tenders3',  label: '3 Tenders',             price: 5.00),
+              OptionItem(id: 'tenders6',  label: '6 Tenders',             price: 10.00),
+              OptionItem(id: 'nuggets6',  label: '6 Nuggets',             price: 4.00),
+              OptionItem(id: 'nuggets12', label: '12 Nuggets',            price: 8.00),
             ],
           ),
-          OptionGroup(
-              id: 'sauce_pf',
-              title: 'Sauces',
-              multiple: true,
-              minSelect: 1,
-              maxSelect: 2,
-              items: _sauces()),
+          OptionGroup(id: 'sauce_pf', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _sauces()),
         ]),
       ];
 
@@ -616,10 +469,8 @@ class _HomeState extends State<Home> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         destinations: [
-          const NavigationDestination(
-              icon: Icon(Icons.grid_view_rounded), label: 'Produits'),
-          const NavigationDestination(
-              icon: Icon(Icons.add_box_outlined), label: 'Créer'),
+          const NavigationDestination(icon: Icon(Icons.grid_view_rounded), label: 'Produits'),
+          const NavigationDestination(icon: Icon(Icons.add_box_outlined), label: 'Créer'),
           NavigationDestination(
             icon: Stack(
               clipBehavior: Clip.none,
@@ -627,28 +478,21 @@ class _HomeState extends State<Home> {
                 const Icon(Icons.shopping_bag_outlined),
                 if (cartBadge > 0)
                   Positioned(
-                    right: -6,
-                    top: -6,
+                    right: -6, top: -6,
                     child: Container(
                       padding: const EdgeInsets.all(3),
-                      decoration:
-                          const BoxDecoration(shape: BoxShape.circle, color: Colors.red),
-                      child: Text('$cartBadge',
-                          style: const TextStyle(fontSize: 10, color: Colors.white)),
+                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.red),
+                      child: Text('$cartBadge', style: const TextStyle(fontSize: 10, color: Colors.white)),
                     ),
                   ),
               ],
             ),
             label: 'Panier (€${totalCart.toStringAsFixed(2)})',
           ),
-          const NavigationDestination(
-              icon: Icon(Icons.receipt_long), label: 'Commandes'),
+          const NavigationDestination(icon: Icon(Icons.receipt_long), label: 'Commandes'),
         ],
         onDestinationSelected: (i) async {
-          if (i == 1) {
-            final ok = await _askPin(context);
-            if (!ok) return;
-          }
+          if (i == 1) { final ok = await _askPin(context); if (!ok) return; }
           if (i == 2) {
             ScaffoldMessenger.of(context).hideCurrentSnackBar();
           }
@@ -660,8 +504,8 @@ class _HomeState extends State<Home> {
 }
 
 /* =======================
-    PAGE 1 : PRODUITS
-    ======================= */
+    PAGE 1 : PRODUITS
+    ======================= */
 class ProductsPage extends StatelessWidget {
   const ProductsPage({super.key});
 
@@ -684,9 +528,7 @@ class ProductsPage extends StatelessWidget {
     int cross = 2;
     if (width > 600) cross = 3;
     if (width > 900) cross = 4;
-    final aspect = width > 900
-        ? 0.9
-        : (width > 600 ? 0.95 : 0.88);
+    final aspect = width > 900 ? 0.9 : (width > 600 ? 0.95 : 0.88);
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -725,8 +567,7 @@ class _ProductCard extends StatelessWidget {
       onTap: openWizard,
       child: Ink(
         decoration: BoxDecoration(
-          color: color.surfaceVariant,
-          borderRadius: BorderRadius.circular(24),
+          color: color.surfaceVariant, borderRadius: BorderRadius.circular(24),
         ),
         child: Stack(
           children: [
@@ -737,8 +578,7 @@ class _ProductCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    height: 56,
-                    width: 56,
+                    height: 56, width: 56,
                     decoration: BoxDecoration(
                       color: color.primary.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(16),
@@ -788,8 +628,8 @@ class _ProductCard extends StatelessWidget {
 }
 
 /* =======================
-    PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
-    ======================= */
+    PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
+    ======================= */
 class CreateProductPage extends StatefulWidget {
   final void Function(int) onGoToTab;
   final int? editIndex;
@@ -827,71 +667,40 @@ class _CreateProductPageState extends State<CreateProductPage> {
     if (idx < 0 || idx >= app.products.length) return;
     final p = app.products[idx];
     nameCtrl.text = p.name;
-    editingGroups
-      ..clear()
-      ..addAll(p.groups.map(_copyGroup));
+    editingGroups..clear()..addAll(p.groups.map(_copyGroup));
     setState(() => editingIndex = idx);
   }
 
   OptionGroup _copyGroup(OptionGroup g) => OptionGroup(
-        id: g.id,
-        title: g.title,
-        multiple: g.multiple,
-        minSelect: g.minSelect,
-        maxSelect: g.maxSelect,
-        items: g.items
-            .map((e) => OptionItem(id: e.id, label: e.label, price: e.price))
-            .toList(),
-      );
+    id: g.id, title: g.title, multiple: g.multiple, minSelect: g.minSelect, maxSelect: g.maxSelect,
+    items: g.items.map((e) => OptionItem(id: e.id, label: e.label, price: e.price)).toList(),
+  );
 
   void addGroup() {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
-    editingGroups.add(OptionGroup(
-        id: id, title: 'Nouveau groupe', multiple: false, minSelect: 1, maxSelect: 1));
+    editingGroups.add(OptionGroup(id: id, title: 'Nouveau groupe', multiple: false, minSelect: 1, maxSelect: 1));
     setState(() {});
   }
 
   void saveProduct() {
     final app = AppScope.of(context);
-    if (nameCtrl.text.trim().isEmpty) {
-      _snack(context, 'Nom du produit requis.');
-      return;
-    }
+    if (nameCtrl.text.trim().isEmpty) { _snack(context, 'Nom du produit requis.'); return; }
     for (final g in editingGroups) {
-      if (g.title.trim().isEmpty) {
-        _snack(context, 'Titre du groupe manquant.');
-        return;
-      }
-      if (g.items.isEmpty) {
-        _snack(context, 'Ajoutez au moins une option dans "${g.title}".');
-        return;
-      }
+      if (g.title.trim().isEmpty) { _snack(context, 'Titre du groupe manquant.'); return; }
+      if (g.items.isEmpty) { _snack(context, 'Ajoutez au moins une option dans "${g.title}".'); return; }
       if (g.minSelect < 0 || g.maxSelect < 1 || g.minSelect > g.maxSelect) {
-        _snack(context, 'Règles min/max invalides dans "${g.title}".');
-        return;
+        _snack(context, 'Règles min/max invalides dans "${g.title}".'); return;
       }
       if (!g.multiple && (g.minSelect != 1 || g.maxSelect != 1)) {
-        _snack(context, 'Choix unique doit avoir min=1 et max=1 (${g.title}).');
-        return;
+        _snack(context, 'Choix unique doit avoir min=1 et max=1 (${g.title}).'); return;
       }
     }
     final p = Product(name: nameCtrl.text.trim(), groups: List.of(editingGroups));
-    if (editingIndex == null) {
-      app.addProduct(p);
-      _snack(context, 'Produit créé.');
-    } else {
-      app.replaceProductAt(editingIndex!, p);
-      _snack(context, 'Produit mis à jour.');
-    }
-    nameCtrl.text = '';
-    editingGroups.clear();
-    setState(() => editingIndex = null);
+    if (editingIndex == null) { app.addProduct(p); _snack(context, 'Produit créé.'); }
+    else { app.replaceProductAt(editingIndex!, p); _snack(context, 'Produit mis à jour.'); }
+    nameCtrl.text = ''; editingGroups.clear(); setState(() => editingIndex = null);
 
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    } else {
-      widget.onGoToTab(0);
-    }
+    if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
   }
 
   @override
@@ -901,36 +710,23 @@ class _CreateProductPageState extends State<CreateProductPage> {
       padding: const EdgeInsets.all(12),
       children: [
         Row(children: [
-          IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () {
-                if (Navigator.of(context).canPop()) {
-                  Navigator.of(context).pop();
-                } else {
-                  widget.onGoToTab(0);
-                }
-              },
-              tooltip: 'Retour'),
+          IconButton(icon: const Icon(Icons.arrow_back), onPressed: () {
+            if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
+          }, tooltip: 'Retour'),
           const SizedBox(width: 8),
           Text(editingIndex == null ? 'Créer un produit' : 'Modifier un produit',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const Spacer(),
           TextButton.icon(
             onPressed: () {
-              nameCtrl.text = '';
-              editingGroups.clear();
-              setState(() => editingIndex = null);
-              if (Navigator.of(context).canPop()) {
-                Navigator.of(context).pop();
-              } else {
-                widget.onGoToTab(0);
-              }
+              nameCtrl.text = ''; editingGroups.clear(); setState(() => editingIndex = null);
+              if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
             },
-            icon: const Icon(Icons.close),
-            label: const Text('Annuler'),
+            icon: const Icon(Icons.close), label: const Text('Annuler'),
           ),
         ]),
         const SizedBox(height: 12),
+
         Card(
           margin: const EdgeInsets.only(bottom: 12),
           child: Padding(
@@ -966,13 +762,12 @@ class _CreateProductPageState extends State<CreateProductPage> {
             ),
           ),
         ),
+
         if (app.products.isNotEmpty) ...[
-          const Text('Produits existants',
-              style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text('Produits existants', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
             itemCount: app.products.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (_, i) {
@@ -982,34 +777,25 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 title: Text(p.name),
                 subtitle: Text('${p.groups.length} groupe(s)'),
                 trailing: FilledButton.tonalIcon(
-                  icon: const Icon(Icons.edit),
-                  label: const Text('Modifier'),
+                  icon: const Icon(Icons.edit), label: const Text('Modifier'),
                   onPressed: () => _loadForEdit(i),
                 ),
               );
             },
           ),
-          const SizedBox(height: 16),
-          const Divider(),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16), const Divider(), const SizedBox(height: 12),
         ],
-        TextField(
-            controller: nameCtrl,
-            decoration: const InputDecoration(
-                labelText: 'Nom du produit', border: OutlineInputBorder())),
+
+        TextField(controller: nameCtrl,
+            decoration: const InputDecoration(labelText: 'Nom du produit', border: OutlineInputBorder())),
         const SizedBox(height: 12),
         Row(children: [
-          FilledButton.icon(
-              onPressed: addGroup,
-              icon: const Icon(Icons.add),
-              label: const Text('Ajouter un groupe')),
+          FilledButton.icon(onPressed: addGroup, icon: const Icon(Icons.add), label: const Text('Ajouter un groupe')),
           const SizedBox(width: 12),
-          OutlinedButton.icon(
-              onPressed: saveProduct,
-              icon: const Icon(Icons.save),
-              label: const Text('Enregistrer')),
+          OutlinedButton.icon(onPressed: saveProduct, icon: const Icon(Icons.save), label: const Text('Enregistrer')),
         ]),
         const SizedBox(height: 12),
+
         for (int i = 0; i < editingGroups.length; i++)
           _GroupEditor(
             key: ValueKey(editingGroups[i].id),
@@ -1017,11 +803,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
             onDelete: () => setState(() => editingGroups.removeAt(i)),
             onChanged: () => setState(() {}),
           ),
+
         if (editingGroups.isEmpty)
           const Padding(
             padding: EdgeInsets.only(top: 24),
-            child: Text(
-                'Aucun groupe. Ajoutez "Pain", "Viande", "Suppléments", "Sauces", etc.'),
+            child: Text('Aucun groupe. Ajoutez "Pain", "Viande", "Suppléments", "Sauces", etc.'),
           ),
       ],
     );
@@ -1032,11 +818,7 @@ class _GroupEditor extends StatefulWidget {
   final OptionGroup group;
   final VoidCallback onDelete;
   final VoidCallback onChanged;
-  const _GroupEditor(
-      {super.key,
-      required this.group,
-      required this.onDelete,
-      required this.onChanged});
+  const _GroupEditor({super.key, required this.group, required this.onDelete, required this.onChanged});
   @override
   State<_GroupEditor> createState() => _GroupEditorState();
 }
@@ -1073,10 +855,7 @@ class _GroupEditorState extends State<_GroupEditor> {
   int get _mode => widget.group.multiple ? 1 : 0;
   set _mode(int v) {
     widget.group.multiple = (v == 1);
-    if (v == 0) {
-      minCtrl.text = '1';
-      maxCtrl.text = '1';
-    }
+    if (v == 0) { minCtrl.text = '1'; maxCtrl.text = '1'; }
     apply();
     setState(() {});
   }
@@ -1084,8 +863,7 @@ class _GroupEditorState extends State<_GroupEditor> {
   void addOption() {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     widget.group.items.add(OptionItem(id: id, label: 'Nouvelle option', price: 0));
-    widget.onChanged();
-    setState(() {});
+    widget.onChanged(); setState(() {});
   }
 
   @override
@@ -1100,8 +878,7 @@ class _GroupEditorState extends State<_GroupEditor> {
             Expanded(
               child: TextField(
                 controller: titleCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'Titre du groupe', border: OutlineInputBorder()),
+                decoration: const InputDecoration(labelText: 'Titre du groupe', border: OutlineInputBorder()),
                 onChanged: (_) => apply(),
               ),
             ),
@@ -1112,9 +889,7 @@ class _GroupEditorState extends State<_GroupEditor> {
                 DropdownMenuItem(value: 0, child: Text('Choix unique')),
                 DropdownMenuItem(value: 1, child: Text('Choix multiple')),
               ],
-              onChanged: (v) {
-                if (v != null) _mode = v;
-              },
+              onChanged: (v) { if (v != null) _mode = v; },
             ),
             const SizedBox(width: 8),
             IconButton(onPressed: widget.onDelete, icon: const Icon(Icons.delete_outline)),
@@ -1123,43 +898,29 @@ class _GroupEditorState extends State<_GroupEditor> {
           Row(children: [
             Expanded(
               child: TextField(
-                controller: minCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                    labelText: 'Sélection min', border: OutlineInputBorder()),
+                controller: minCtrl, keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Sélection min', border: OutlineInputBorder()),
                 onChanged: (_) => apply(),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: TextField(
-                controller: maxCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                    labelText: 'Sélection max', border: OutlineInputBorder()),
+                controller: maxCtrl, keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Sélection max', border: OutlineInputBorder()),
                 onChanged: (_) => apply(),
               ),
             ),
             const SizedBox(width: 8),
-            FilledButton.icon(
-                onPressed: addOption,
-                icon: const Icon(Icons.add),
-                label: const Text('Ajouter une option')),
+            FilledButton.icon(onPressed: addOption, icon: const Icon(Icons.add), label: const Text('Ajouter une option')),
           ]),
           const SizedBox(height: 8),
           for (int i = 0; i < g.items.length; i++)
             _OptionEditor(
               key: ValueKey(g.items[i].id),
               item: g.items[i],
-              onDelete: () {
-                g.items.removeAt(i);
-                widget.onChanged();
-                setState(() {});
-              },
-              onChanged: () {
-                widget.onChanged();
-                setState(() {});
-              },
+              onDelete: () { g.items.removeAt(i); widget.onChanged(); setState(() {}); },
+              onChanged: () { widget.onChanged(); setState(() {}); },
             ),
         ]),
       ),
@@ -1171,11 +932,7 @@ class _OptionEditor extends StatefulWidget {
   final OptionItem item;
   final VoidCallback onDelete;
   final VoidCallback onChanged;
-  const _OptionEditor(
-      {super.key,
-      required this.item,
-      required this.onDelete,
-      required this.onChanged});
+  const _OptionEditor({super.key, required this.item, required this.onDelete, required this.onChanged});
   @override
   State<_OptionEditor> createState() => _OptionEditorState();
 }
@@ -1202,7 +959,6 @@ class _OptionEditorState extends State<_OptionEditor> {
     widget.item.price = double.tryParse(priceCtrl.text.replaceAll(',', '.')) ?? 0.0;
     widget.onChanged();
   }
-
   @override
   Widget build(BuildContext context) {
     return ListTile(
@@ -1211,8 +967,7 @@ class _OptionEditorState extends State<_OptionEditor> {
         Expanded(
           child: TextField(
             controller: labelCtrl,
-            decoration: const InputDecoration(
-                labelText: 'Nom de l’option', border: OutlineInputBorder()),
+            decoration: const InputDecoration(labelText: 'Nom de l’option', border: OutlineInputBorder()),
             onChanged: (_) => apply(),
           ),
         ),
@@ -1222,8 +977,7 @@ class _OptionEditorState extends State<_OptionEditor> {
           child: TextField(
             controller: priceCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-                labelText: 'Prix (€)', border: OutlineInputBorder()),
+            decoration: const InputDecoration(labelText: 'Prix (€)', border: OutlineInputBorder()),
             onChanged: (_) => apply(),
           ),
         ),
@@ -1234,8 +988,8 @@ class _OptionEditorState extends State<_OptionEditor> {
 }
 
 /* =======================
-    WIZARD
-    ======================= */
+    WIZARD
+    ======================= */
 class OrderWizard extends StatefulWidget {
   final Product product;
   final Map<String, List<OptionItem>>? initialPicked;
@@ -1249,7 +1003,7 @@ class OrderWizard extends StatefulWidget {
   });
 
   @override
-  State<OrderWizard> createState() => _OrderWizardState();
+   State<OrderWizard> createState() => _OrderWizardState();
 }
 
 class _OrderWizardState extends State<OrderWizard> {
@@ -1283,7 +1037,6 @@ class _OrderWizardState extends State<OrderWizard> {
         final l = picked[gid];
         return (l == null || l.isEmpty) ? '' : l.first.id;
       }
-
       final t = sel('type_tacos'); // t1 / t2 / t3
       return base.where((g) {
         if (g.id == 'viande2') return t == 't2' || t == 't3';
@@ -1295,18 +1048,15 @@ class _OrderWizardState extends State<OrderWizard> {
     return base;
   }
 
-  void _toggleSingle(OptionGroup g, OptionItem it) {
-    picked[g.id] = [it];
-    setState(() {});
-  }
+  void _toggleSingle(OptionGroup g, OptionItem it) { picked[g.id] = [it]; setState(() {}); }
 
   void _toggleMulti(OptionGroup g, OptionItem it) {
     final list = List<OptionItem>.from(picked[g.id] ?? []);
     bool isCrud = g.id == 'crudites';
     bool isSauceGroup = g.id == 'sauces' ||
-        g.id == 'sauce_burger' ||
-        g.id == 'sauce_pf' ||
-        g.id == 'sauce_enfant';
+                        g.id == 'sauce_burger' ||
+                        g.id == 'sauce_pf' ||
+                        g.id == 'sauce_enfant';
     bool isTacosSauce = g.id == 'sauce_tacos';
 
     bool exists = list.any((e) => e.id == it.id);
@@ -1315,30 +1065,20 @@ class _OrderWizardState extends State<OrderWizard> {
     bool isSansCrud = it.id == 'sans_crudites';
     bool isAvecCrud = it.id == 'avec_crudites' || it.id == 'avec';
     if (isCrud && (isSansCrud || isAvecCrud)) {
-      if (exists) {
-        list.removeWhere((e) => e.id == it.id);
-        picked[g.id] = list;
-      } else {
-        picked[g.id] = [it];
-      }
-      setState(() {});
-      return;
+      if (exists) { list.removeWhere((e) => e.id == it.id); picked[g.id] = list; }
+      else { picked[g.id] = [it]; }
+      setState((){}); return;
     }
     if (isCrud) {
-      list.removeWhere(
-          (e) => e.id == 'sans_crudites' || e.id == 'avec_crudites' || e.id == 'avec');
+      list.removeWhere((e) => e.id == 'sans_crudites' || e.id == 'avec_crudites' || e.id == 'avec');
     }
 
     // --- Genel sos grupları: 'sans_sauce' tek başına ---
     if (isSauceGroup) {
       if (it.id == 'sans_sauce') {
-        if (exists) {
-          list.removeWhere((e) => e.id == 'sans_sauce');
-        } else {
-          picked[g.id] = [it];
-        }
-        setState(() {});
-        return;
+        if (exists) list.removeWhere((e) => e.id == 'sans_sauce');
+        else picked[g.id] = [it];
+        setState((){}); return;
       } else {
         list.removeWhere((e) => e.id == 'sans_sauce');
       }
@@ -1347,16 +1087,9 @@ class _OrderWizardState extends State<OrderWizard> {
     // --- Tacos sos kuralları ---
     if (isTacosSauce) {
       if (it.id == 'sans_sauce' || it.id == 'seulement_fromagere') {
-        if (exists) {
-          list.removeWhere((e) => e.id == it.id);
-        } else {
-          picked[g.id] = [it];
-          setState(() {});
-          return;
-        }
-        picked[g.id] = list;
-        setState(() {});
-        return;
+        if (exists) list.removeWhere((e) => e.id == it.id);
+        else { picked[g.id] = [it]; setState((){}); return; }
+        picked[g.id] = list; setState((){}); return;
       }
       if (it.id == 'fromagere') {
         // 'sans_fromagere' seçiliyken fromagere'a izin verme
@@ -1366,19 +1099,11 @@ class _OrderWizardState extends State<OrderWizard> {
         if (exists) {
           list.removeWhere((e) => e.id == 'sans_fromagere');
         } else {
-          list.removeWhere((e) =>
-              e.id == 'fromagere' ||
-              e.id == 'seulement_fromagere' ||
-              e.id == 'sans_sauce');
-          if (list.length >= g.maxSelect) {
-            setState(() {});
-            return;
-          }
+          list.removeWhere((e) => e.id == 'fromagere' || e.id == 'seulement_fromagere' || e.id == 'sans_sauce');
+          if (list.length >= g.maxSelect) { setState((){}); return; }
           list.add(it);
         }
-        picked[g.id] = list;
-        setState(() {});
-        return;
+        picked[g.id] = list; setState((){}); return;
       }
       // başka bir sos seçiliyorsa 'sans_sauce' ve 'seulement_fromagere' temizle
       list.removeWhere((e) => e.id == 'sans_sauce' || e.id == 'seulement_fromagere');
@@ -1388,10 +1113,7 @@ class _OrderWizardState extends State<OrderWizard> {
     if (exists) {
       list.removeWhere((e) => e.id == it.id);
     } else {
-      if (list.length >= g.maxSelect) {
-        setState(() {});
-        return;
-      }
+      if (list.length >= g.maxSelect) { setState((){}); return; }
       list.add(it);
     }
     picked[g.id] = list;
@@ -1427,7 +1149,7 @@ class _OrderWizardState extends State<OrderWizard> {
       ),
       body: Stack(
         children: [
-          Positioned.fill(
+          Positioned(fill: true,
             child: isSummary
                 ? _Summary(product: widget.product, picked: picked, total: total)
                 : _GroupStep(
@@ -1442,7 +1164,9 @@ class _OrderWizardState extends State<OrderWizard> {
             bottom: 16 + MediaQuery.of(context).padding.bottom,
             child: FloatingActionButton.large(
               heroTag: 'prevFab',
-              onPressed: step == 0 ? null : () => setState(() => step--),
+              onPressed: step == 0
+                  ? null
+                  : () => setState(() => step--),
               child: const Icon(Icons.arrow_back),
             ),
           ),
@@ -1455,8 +1179,7 @@ class _OrderWizardState extends State<OrderWizard> {
                 if (isSummary) {
                   if (widget.editMode) {
                     final result = {
-                      for (final e in picked.entries)
-                        e.key: List<OptionItem>.from(e.value)
+                      for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
                     };
                     Navigator.pop(context, result);
                   } else {
@@ -1474,9 +1197,7 @@ class _OrderWizardState extends State<OrderWizard> {
                 }
                 setState(() => step++);
               },
-              child: Icon(isSummary
-                  ? (widget.editMode ? Icons.check : Icons.add_shopping_cart)
-                  : Icons.arrow_forward),
+              child: Icon(isSummary ? (widget.editMode ? Icons.check : Icons.add_shopping_cart) : Icons.arrow_forward),
             ),
           ),
         ],
@@ -1543,8 +1264,7 @@ class _GroupStep extends StatelessWidget {
               final isSelected = selectedList.any((e) => e.id == it.id);
 
               // YALNIZCA diğerlerini kilitle; seçili özel buton dokunulabilir kalsın
-              final disabled = isCrudGroup &&
-                  (avecOn || sansOn) &&
+              final disabled = isCrudGroup && (avecOn || sansOn) &&
                   !((avecOn && isAvecId(it.id)) || (sansOn && isSansId(it.id)));
 
               void onTap() {
@@ -1562,7 +1282,9 @@ class _GroupStep extends StatelessWidget {
                   opacity: disabled ? 0.35 : 1.0,
                   child: Ink(
                     decoration: BoxDecoration(
-                      color: isSelected ? color.primaryContainer : color.surfaceVariant,
+                      color: isSelected
+                          ? color.primaryContainer
+                          : color.surfaceVariant,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: isSelected ? color.primary : color.outlineVariant,
@@ -1605,15 +1327,13 @@ class _GroupStep extends StatelessWidget {
                                   textAlign: TextAlign.center,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontSize: 16, fontWeight: FontWeight.w600),
+                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 6),
                                 if (it.price != 0)
                                   Text(
                                     '+ ${_formatEuro(it.price)}',
-                                    style: TextStyle(
-                                        fontSize: 14, color: color.onSurfaceVariant),
+                                    style: TextStyle(fontSize: 14, color: color.onSurfaceVariant),
                                     textAlign: TextAlign.center,
                                   ),
                               ],
@@ -1644,8 +1364,7 @@ class _Summary extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        Text('Récapitulatif — ${product.name}',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text('Récapitulatif — ${product.name}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         for (final g in product.groups)
           if ((picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
@@ -1660,10 +1379,8 @@ class _Summary extends StatelessWidget {
             const Divider(),
           ],
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('SOUS-TOTAL',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          Text('€${total.toStringAsFixed(2)}',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text('SOUS-TOTAL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text('€${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         ]),
         const SizedBox(height: 24),
       ],
@@ -1672,8 +1389,8 @@ class _Summary extends StatelessWidget {
 }
 
 /* =======================
-    PAGE 3 : PANIER
-    ======================= */
+    PAGE 3 : PANIER
+    ======================= */
 class CartPage extends StatelessWidget {
   const CartPage({super.key});
   @override
@@ -1697,8 +1414,7 @@ class CartPage extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
           child: Row(children: [
-            const Text('Panier',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('Panier', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Spacer(),
             TextButton.icon(
               onPressed: () => app.clearCart(),
@@ -1725,8 +1441,7 @@ class CartPage extends StatelessWidget {
                       if ((l.picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
                         Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
                         for (final it in (l.picked[g.id] ?? const <OptionItem>[]))
-                          Text(
-                              '• ${it.label}${it.price == 0 ? '' : ' (+€${it.price.toStringAsFixed(2)})'}'),
+                          Text('• ${it.label}${it.price == 0 ? '' : ' (+€${it.price.toStringAsFixed(2)})'}'),
                       ],
                   ],
                 ),
@@ -1770,10 +1485,8 @@ class CartPage extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.all(12),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            const Text('TOTAL',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text('€${total.toStringAsFixed(2)}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text('TOTAL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('€${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ]),
         ),
         Padding(
@@ -1800,8 +1513,8 @@ class CartPage extends StatelessWidget {
 }
 
 /* =======================
-    PAGE 4 : COMMANDES + YAZDIRMA
-    ======================= */
+    PAGE 4 : COMMANDES + YAZDIRMA
+    ======================= */
 class OrdersPage extends StatelessWidget {
   const OrdersPage({super.key});
   @override
@@ -1824,27 +1537,20 @@ class OrdersPage extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
           child: Row(children: [
-            const Text('Commandes',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('Commandes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Spacer(),
             const SizedBox(width: 8),
             TextButton.icon(
               onPressed: () async {
-                final pinOk = await _askPin(context);
-                if (!pinOk) return;
+                final pinOk = await _askPin(context); if (!pinOk) return;
                 final ok = await showDialog<bool>(
                   context: context,
                   builder: (_) => AlertDialog(
                     title: const Text('Fin de journée ?'),
-                    content: const Text(
-                        'Toutes les commandes seront supprimées. Action irréversible.'),
+                    content: const Text('Toutes les commandes seront supprimées. Action irréversible.'),
                     actions: [
-                      TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Annuler')),
-                      FilledButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Supprimer')),
+                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
+                      FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Supprimer')),
                     ],
                   ),
                 );
@@ -1866,8 +1572,7 @@ class OrdersPage extends StatelessWidget {
               final who = o.customer.isEmpty ? '' : ' — ${o.customer}';
               return ListTile(
                 leading: const Icon(Icons.receipt),
-                title: Text(
-                    'Commande$who • ${o.lines.length} article(s) • €${o.total.toStringAsFixed(2)}'),
+                title: Text('Commande$who • ${o.lines.length} article(s) • €${o.total.toStringAsFixed(2)}'),
                 subtitle: Text('Prêt à ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}'),
                 trailing: IconButton(
                   icon: const Icon(Icons.print_outlined),
@@ -1882,91 +1587,71 @@ class OrdersPage extends StatelessWidget {
                   tooltip: 'Imprimer',
                 ),
                 onTap: () {
-                  showDialog(
-                      context: context,
-                      builder: (_) {
-                        return AlertDialog(
-                          title: const Text('Détails de la commande'),
-                          content: SizedBox(
-                            width: 360,
-                            child: ListView(
-                              shrinkWrap: true,
-                              children: [
-                                if (o.customer.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 4),
-                                    child: Text('Client: ${o.customer}',
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold)),
-                                  ),
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Text(
-                                      'Prêt à: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold)),
-                                ),
-                                for (int idx = 0; idx < o.lines.length; idx++) ...[
-                                  Text('Article ${idx + 1}: ${o.lines[idx].product.name}',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold)),
-                                  for (final g in o.lines[idx].product.groups)
-                                    if ((o.lines[idx].picked[g.id] ??
-                                            const <OptionItem>[])
-                                        .isNotEmpty) ...[
-                                      Text(g.title,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold)),
-                                      for (final it in (o.lines[idx]
-                                              .picked[g.id] ??
-                                          const <OptionItem>[]))
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text('• ${it.label}'),
-                                            Text(it.price == 0
-                                                ? '€0.00'
-                                                : '€${it.price.toStringAsFixed(2)}'),
-                                          ],
-                                        ),
-                                    ],
-                                  const Divider(),
+                  showDialog(context: context, builder: (_) {
+                    return AlertDialog(
+                      title: const Text('Détails de la commande'),
+                      content: SizedBox(
+                        width: 360,
+                        child: ListView(
+                          shrinkWrap: true,
+                          children: [
+                            if (o.customer.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text('Client: ${o.customer}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text('Prêt à: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                            for (int idx = 0; idx < o.lines.length; idx++) ...[
+                              Text('Article ${idx+1}: ${o.lines[idx].product.name}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold)),
+                              for (final g in o.lines[idx].product.groups)
+                                if ((o.lines[idx].picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
+                                  Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  for (final it in (o.lines[idx].picked[g.id] ?? const <OptionItem>[]))
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text('• ${it.label}'),
+                                        Text(it.price == 0 ? '€0.00' : '€${it.price.toStringAsFixed(2)}'),
+                                      ],
+                                    ),
                                 ],
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    const Text('TOTAL',
-                                        style: TextStyle(fontWeight: FontWeight.bold)),
-                                    Text('€${o.total.toStringAsFixed(2)}',
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
+                              const Divider(),
+                            ],
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold)),
+                                Text('€${o.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () async {
-                                try {
-                                  await printOrderAndroid(o);
-                                  if (context.mounted) {
-                                    Navigator.pop(context);
-                                    _snack(context, 'Fiş yazıcıya gönderildi.');
-                                  }
-                                } catch (e) {
-                                  _snack(context, 'Yazdırma hatası: $e');
-                                }
-                              },
-                              child: const Text('Imprimer'),
-                            ),
-                            TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('Fermer')),
                           ],
-                        );
-                      });
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () async {
+                            try {
+                              await printOrderAndroid(o);
+                              if (context.mounted) {
+                                Navigator.pop(context);
+                                _snack(context, 'Fiş yazıcıya gönderildi.');
+                              }
+                            } catch (e) {
+                               _snack(context, 'Yazdırma hatası: $e');
+                            }
+                          },
+                          child: const Text('Imprimer'),
+                        ),
+                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fermer')),
+                      ],
+                    );
+                  });
                 },
               );
             },
@@ -1978,8 +1663,8 @@ class OrdersPage extends StatelessWidget {
 }
 
 /* =======================
-    DİYALOGLAR & UTIL
-    ======================= */
+    DİYALOGLAR & UTIL
+    ======================= */
 Future<bool> _askPin(BuildContext context) async {
   final ctrl = TextEditingController();
   final ok = await showDialog<bool>(
@@ -1987,19 +1672,12 @@ Future<bool> _askPin(BuildContext context) async {
     builder: (ctx) => AlertDialog(
       title: const Text('Code PIN requis'),
       content: TextField(
-        controller: ctrl,
-        keyboardType: TextInputType.number,
-        obscureText: true,
-        maxLength: 8,
-        decoration: const InputDecoration(
-            labelText: 'Entrez le code', border: OutlineInputBorder()),
+        controller: ctrl, keyboardType: TextInputType.number, obscureText: true, maxLength: 8,
+        decoration: const InputDecoration(labelText: 'Entrez le code', border: OutlineInputBorder()),
       ),
       actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
-        FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim() == _ADMIN_PIN),
-            child: const Text('Valider')),
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim() == _ADMIN_PIN), child: const Text('Valider')),
       ],
     ),
   );
@@ -2022,8 +1700,7 @@ Future<String?> _askCustomerName(BuildContext context) async {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                controller: ctrl,
-                autofocus: true,
+                controller: ctrl, autofocus: true,
                 decoration: InputDecoration(
                   labelText: 'Écrire le nom',
                   border: const OutlineInputBorder(),
@@ -2040,16 +1717,11 @@ Future<String?> _askCustomerName(BuildContext context) async {
             ],
           ),
           actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, null),
-                child: const Text('Annuler')),
+            TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Annuler')),
             FilledButton(
               onPressed: () {
                 final name = ctrl.text.trim();
-                if (name.isEmpty) {
-                  setState(() => error = 'Le nom est requis.');
-                  return;
-                }
+                if (name.isEmpty) { setState(() => error = 'Le nom est requis.'); return; }
                 Navigator.pop(ctx, name);
               },
               child: const Text('Valider'),
@@ -2086,8 +1758,8 @@ void _showWarn(BuildContext context, String msg) {
 }
 
 /* =======================
-    Choisir butonu
-    ======================= */
+    Choisir butonu
+    ======================= */
 Widget choisirButton(VoidCallback onTap, BuildContext context) {
   final color = Theme.of(context).colorScheme;
   return Material(
@@ -2097,8 +1769,7 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
       customBorder: const CircleBorder(),
       onTap: onTap,
       child: const SizedBox(
-        height: 48,
-        width: 48,
+        height: 48, width: 48,
         child: Icon(Icons.shopping_cart_outlined, color: Colors.white),
       ),
     ),
@@ -2123,73 +1794,38 @@ String _rightLine(String left, String right, {int width = 32}) {
 }
 
 void _cmd(Socket s, List<int> bytes) => s.add(bytes);
-void _boldOn(Socket s) => _cmd(s, [27, 69, 1]);
+void _boldOn(Socket s)  => _cmd(s, [27, 69, 1]);
 void _boldOff(Socket s) => _cmd(s, [27, 69, 0]);
 void _size(Socket s, int n) => _cmd(s, [29, 33, n]);
-void _alignLeft(Socket s) => _cmd(s, [27, 97, 0]);
+void _alignLeft(Socket s)   => _cmd(s, [27, 97, 0]);
 void _alignCenter(Socket s) => _cmd(s, [27, 97, 1]);
-void _alignRight(Socket s) => _cmd(s, [27, 97, 2]);
+void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
 
 void _writeCp1252(Socket socket, String text) {
   final out = <int>[];
   for (final r in text.runes) {
-    if (r == 0x20AC) {
-      out.add(0x80);
-      continue;
-    } // €
-    if (r <= 0x7F) {
-      out.add(r);
-      continue;
-    } // ASCII
+    if (r == 0x20AC) { out.add(0x80); continue; }       // €
+    if (r <= 0x7F)   { out.add(r); continue; }           // ASCII
     final ch = String.fromCharCode(r);
     const repl = {
-      'ç': 'c',
-      'Ç': 'C',
-      'ğ': 'g',
-      'Ğ': 'G',
-      'ı': 'i',
-      'İ': 'I',
-      'ö': 'o',
-      'Ö': 'O',
-      'ş': 's',
-      'Ş': 'S',
-      'ü': 'u',
-      'Ü': 'U',
-      'é': 'e',
-      'è': 'e',
-      'ê': 'e',
-      'á': 'a',
-      'à': 'a',
-      'â': 'a',
-      'ô': 'o',
-      'ù': 'u',
-      '–': '-',
-      '—': '-',
-      '…': '...',
-      'Œ': 'Oe',
-      'œ': 'oe',
+      'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
+      'ş':'s','Ş':'S','ü':'u','Ü':'U','é':'e','è':'e','ê':'e','á':'a','à':'a','â':'a',
+      'ô':'o','ù':'u','–':'-','—':'-','…':'...',
+      'Œ':'Oe','œ':'oe',
     };
     final s = repl[ch] ?? '?';
     for (final cu in s.codeUnits) {
-      if (cu == 0x20AC) {
-        out.add(0x80);
-      } else {
-        out.add(cu <= 0x7F ? cu : 0x3F);
-      }
+      if (cu == 0x20AC) { out.add(0x80); } else { out.add(cu <= 0x7F ? cu : 0x3F); }
     }
   }
   socket.add(out);
 }
 
-/// ==================================================
-/// GÜNCELLENMİŞ YAZDIRMA FONKSİYONU
-/// ==================================================
 Future<void> printOrderAndroid(SavedOrder o) async {
-  final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT,
-      timeout: const Duration(seconds: 5));
+  final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  _cmd(socket, [27, 64]); // init
-  _cmd(socket, [27, 116, 16]); // codepage (CP1252 genelde 16)
+  _cmd(socket, [27, 64]);       // init
+  _cmd(socket, [27, 116, 16]);   // codepage (CP1252 genelde 16)
 
   _alignCenter(socket);
   _size(socket, 17);
@@ -2213,11 +1849,12 @@ Future<void> printOrderAndroid(SavedOrder o) async {
   _boldOff(socket);
 
   _alignLeft(socket);
-  _writeCp1252(socket, '--------------------------------\n');
+  _writeCp1252(socket, '------------------------------\n');
 
   for (int i = 0; i < o.lines.length; i++) {
     final l = o.lines[i];
-    // DEĞİŞİKLİK: "Item X:" kaldırıldı, direkt ürün adı ve fiyatı yazılıyor.
+
+    // *** BURADA "Item ..." KALDIRILDI ***
     _writeCp1252(socket, _rightLine(l.product.name, _money(l.total)) + '\n');
 
     for (final g in l.product.groups) {
@@ -2229,17 +1866,16 @@ Future<void> printOrderAndroid(SavedOrder o) async {
         }
       }
     }
-    if (i < o.lines.length - 1) {
+    if (i != o.lines.length - 1) {
       _writeCp1252(socket, '--------------------------------\n');
     }
   }
 
-  _writeCp1252(socket, '--------------------------------\n');
+  _writeCp1252(socket, '------------------------------\n');
   _alignRight(socket);
   _boldOn(socket);
   _size(socket, 1);
-  _writeCp1252(
-      socket, _rightLine('TOTAL', '€${o.total.toStringAsFixed(2).replaceAll('.', ',')}') + '\n');
+  _writeCp1252(socket, _rightLine('TOTAL', '€${o.total.toStringAsFixed(2).replaceAll('.', ',')}') + '\n');
   _size(socket, 0);
   _boldOff(socket);
 
