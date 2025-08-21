@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
    ======================= */
 // LÜTFEN BU IP ADRESİNİ KENDİ YAZICINIZIN IP ADRESİYLE DEĞİŞTİRİN
 const String PRINTER_IP = '192.168.1.1'; // <-- Epson yazıcının IP'si
-const int    PRINTER_PORT = 9100;      // Genelde 9100 (RAW)
+const int    PRINTER_PORT = 9100;       // Genelde 9100 (RAW)
 
 const String _ADMIN_PIN = '6538';
 
@@ -26,10 +26,17 @@ class App extends StatelessWidget {
   const App({super.key});
   @override
   Widget build(BuildContext context) {
+    // DEĞİŞİKLİK 2: Tema rengini “restauration rapide” havasına çek
     return MaterialApp(
       title: 'BISCORNUE',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true),
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFFFF5722), // Deep Orange 500 (ketchup aurası)
+          brightness: Brightness.light,
+        ),
+      ),
       home: const Home(),
     );
   }
@@ -258,15 +265,15 @@ List<OptionItem> _meats(double base) => [
 ];
 
 List<OptionItem> _supps() => [
-  OptionItem(id: 'cheddar',   label: 'Cheddar',                     price: 1.50),
-  OptionItem(id: 'mozza',     label: 'Mozzarella rapee',            price: 1.50),
-  OptionItem(id: 'feta',      label: 'Feta',                        price: 1.50),
-  OptionItem(id: 'porc',      label: 'Poitrine de porc fume',       price: 1.50),
-  OptionItem(id: 'chevre',    label: 'Chevre',                      price: 1.50),
-  OptionItem(id: 'legumes',   label: 'Legumes grilles',             price: 1.50),
-  OptionItem(id: 'oeuf',      label: 'Oeuf',                        price: 1.50),
-  OptionItem(id: 'd_cheddar', label: 'Double Cheddar',              price: 3.00),
-  OptionItem(id: 'd_mozza',   label: 'Double Mozzarella rapee',     price: 3.00),
+  OptionItem(id: 'cheddar',   label: 'Cheddar',                       price: 1.50),
+  OptionItem(id: 'mozza',     label: 'Mozzarella rapee',              price: 1.50),
+  OptionItem(id: 'feta',      label: 'Feta',                          price: 1.50),
+  OptionItem(id: 'porc',      label: 'Poitrine de porc fume',         price: 1.50),
+  OptionItem(id: 'chevre',    label: 'Chevre',                        price: 1.50),
+  OptionItem(id: 'legumes',   label: 'Legumes grilles',               price: 1.50),
+  OptionItem(id: 'oeuf',      label: 'Oeuf',                          price: 1.50),
+  OptionItem(id: 'd_cheddar', label: 'Double Cheddar',                price: 3.00),
+  OptionItem(id: 'd_mozza',   label: 'Double Mozzarella rapee',       price: 3.00),
   OptionItem(id: 'd_porc',    label: 'Double Poitrine de porc fume',price: 3.00),
 ];
 
@@ -332,10 +339,10 @@ class _HomeState extends State<Home> {
           OptionGroup(
             id: 'type_sand', title: 'Sandwich', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
-              OptionItem(id: 'kebab',      label: 'Kebab',       price: 10.00),
+              OptionItem(id: 'kebab',      label: 'Kebab',        price: 10.00),
               OptionItem(id: 'curryosite', label: 'La Curryosite', price: 10.00),
-              OptionItem(id: 'vege',       label: 'Vegetarien',  price: 10.00),
-              OptionItem(id: 'berlineur',  label: 'Berlineur',   price: 12.00),
+              OptionItem(id: 'vege',       label: 'Vegetarien',   price: 10.00),
+              OptionItem(id: 'berlineur',  label: 'Berlineur',    price: 12.00),
             ],
           ),
           OptionGroup(
@@ -447,21 +454,22 @@ class _HomeState extends State<Home> {
     final totalCart = app.cart.fold(0.0, (s, l) => s + l.total);
     final cartBadge = app.cart.length;
 
+    // DEĞİŞİKLİK 1A: pages dizisi (Créer en sona)
     final pages = [
-      const ProductsPage(),
-      CreateProductPage(onGoToTab: (i) => setState(() => index = i)),
-      const CartPage(),
-      const OrdersPage(),
+      const ProductsPage(),                       // 0: Produits
+      const CartPage(),                           // 1: Panier
+      const OrdersPage(),                         // 2: Commandes
+      CreateProductPage(onGoToTab: (i) => setState(() => index = i)), // 3: Créer
     ];
 
     return Scaffold(
       appBar: AppBar(title: const Text('BISCORNUE')),
       body: pages[index],
+      // DEĞİŞİKLİK 1B & 1C: NavigationBar.destinations ve onDestinationSelected güncellendi
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         destinations: [
           const NavigationDestination(icon: Icon(Icons.grid_view_rounded), label: 'Produits'),
-          const NavigationDestination(icon: Icon(Icons.add_box_outlined), label: 'Créer'),
           NavigationDestination(
             icon: Stack(
               clipBehavior: Clip.none,
@@ -481,10 +489,16 @@ class _HomeState extends State<Home> {
             label: 'Panier (€${totalCart.toStringAsFixed(2)})',
           ),
           const NavigationDestination(icon: Icon(Icons.receipt_long), label: 'Commandes'),
+          const NavigationDestination(icon: Icon(Icons.add_box_outlined), label: 'Créer'),
         ],
         onDestinationSelected: (i) async {
-          if (i == 1) { final ok = await _askPin(context); if (!ok) return; }
-          if (i == 2) {
+          // Yalnızca "Créer" sekmesi PIN istesin (artık index 3)
+          if (i == 3) {
+            final ok = await _askPin(context);
+            if (!ok) return;
+          }
+          // Panier'e geçerken eski snack'leri kapat (artık index 1)
+          if (i == 1) {
             ScaffoldMessenger.of(context).hideCurrentSnackBar();
           }
           setState(() => index = i);
@@ -520,7 +534,6 @@ class ProductsPage extends StatelessWidget {
     if (width > 600) cross = 3;
     if (width > 900) cross = 4;
 
-    // DEĞİŞİKLİK 1: DAHA BASIK KART
     final aspect = width > 900 ? 1.40 : (width > 600 ? 1.30 : 1.10);
 
     return GridView.builder(
@@ -564,7 +577,6 @@ class _ProductCard extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            // DEĞİŞİKLİK 2: ikon ve boşlukları daha da küçült
             Padding(
               padding: const EdgeInsets.all(10),
               child: Column(
@@ -1448,7 +1460,7 @@ class CartPage extends StatelessWidget {
                   spacing: 4,
                   children: [
                     IconButton(
-                      tooltip: 'Modifier', // DEĞİŞİKLİK 3
+                      tooltip: 'Modifier',
                       icon: const Icon(Icons.edit_outlined),
                       onPressed: () async {
                         final result = await Navigator.push<Map<String, List<OptionItem>>>(
@@ -1464,13 +1476,13 @@ class CartPage extends StatelessWidget {
                         if (result != null) {
                           app.updateCartLineAt(i, result);
                           if (context.mounted) {
-                            _snack(context, 'Ligne mise à jour.'); // DEĞİŞİKLİK 3
+                            _snack(context, 'Ligne mise à jour.');
                           }
                         }
                       },
                     ),
                     IconButton(
-                      tooltip: 'Supprimer', // DEĞİŞİKLİK 3
+                      tooltip: 'Supprimer',
                       icon: const Icon(Icons.delete_outline),
                       onPressed: () => app.removeCartLineAt(i),
                     ),
@@ -1587,9 +1599,9 @@ class OrdersPage extends StatelessWidget {
                   onPressed: () async {
                     try {
                       await printOrderAndroid(o);
-                      _snack(context, 'Envoyé à l’imprimante.'); // DEĞİŞİKLİK 4
+                      _snack(context, 'Envoyé à l’imprimante.');
                     } catch (e) {
-                      _snack(context, 'Échec de l’impression: $e'); // DEĞİŞİKLİK 4
+                      _snack(context, 'Échec de l’impression: $e');
                     }
                   },
                   tooltip: 'Imprimer',
@@ -1648,10 +1660,10 @@ class OrdersPage extends StatelessWidget {
                               await printOrderAndroid(o);
                               if (context.mounted) {
                                 Navigator.pop(context);
-                                _snack(context, 'Envoyé à l’imprimante.'); // DEĞİŞİKLİK 4
+                                _snack(context, 'Envoyé à l’imprimante.');
                               }
                             } catch (e) {
-                               _snack(context, 'Échec de l’impression: $e'); // DEĞİŞİKLİK 4
+                               _snack(context, 'Échec de l’impression: $e');
                             }
                           },
                           child: const Text('Imprimer'),
@@ -1768,7 +1780,6 @@ void _showWarn(BuildContext context, String msg) {
 /* =======================
    Choisir butonu
    ======================= */
-// DEĞİŞİKLİK 5: choisirButton (isteğe bağlı ufaltma)
 Widget choisirButton(VoidCallback onTap, BuildContext context) {
   final color = Theme.of(context).colorScheme;
   return Material(
