@@ -4,17 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /* =======================
-   Sabitler
-   ======================= */
+  Sabitler
+  ======================= */
 // LÜTFEN BU IP ADRESİNİ KENDİ YAZICINIZIN IP ADRESİYLE DEĞİŞTİRİN
 const String PRINTER_IP = '192.168.1.1'; // <-- Epson yazıcının IP'si
-const int    PRINTER_PORT = 9100;       // Genelde 9100 (RAW)
+const int    PRINTER_PORT = 9100;        // Genelde 9100 (RAW)
 
 const String _ADMIN_PIN = '6538';
 
 /* =======================
-   ENTRY
-   ======================= */
+  ENTRY
+  ======================= */
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final appState = AppState();
@@ -43,8 +43,8 @@ class App extends StatelessWidget {
 }
 
 /* =======================
-   MODELLER & STATE
-   ======================= */
+  MODELLER & STATE
+  ======================= */
 class Product {
   String name;
   final List<OptionGroup> groups;
@@ -314,8 +314,8 @@ class AppScope extends InheritedNotifier<AppState> {
 }
 
 /* =======================
-   HOME (4 sekme)
-   ======================= */
+  HOME (4 sekme)
+  ======================= */
 class Home extends StatefulWidget {
   const Home({super.key});
   @override
@@ -339,10 +339,10 @@ class _HomeState extends State<Home> {
           OptionGroup(
             id: 'type_sand', title: 'Sandwich', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
-              OptionItem(id: 'kebab',      label: 'Kebab',        price: 10.00),
+              OptionItem(id: 'kebab',      label: 'Kebab',         price: 10.00),
               OptionItem(id: 'curryosite', label: 'La Curryosite', price: 10.00),
-              OptionItem(id: 'vege',       label: 'Vegetarien',   price: 10.00),
-              OptionItem(id: 'berlineur',  label: 'Berlineur',    price: 12.00),
+              OptionItem(id: 'vege',       label: 'Vegetarien',    price: 10.00),
+              OptionItem(id: 'berlineur',  label: 'Berlineur',     price: 12.00),
             ],
           ),
           OptionGroup(
@@ -355,11 +355,11 @@ class _HomeState extends State<Home> {
           OptionGroup(
             id: 'crudites', title: 'Crudites / Retirer', multiple: true, minSelect: 0, maxSelect: 4,
             items: [
-              OptionItem(id: 'avec_crudites', label: 'Avec crudités',  price: 0.00),
-              OptionItem(id: 'sans_crudites', label: 'Sans crudités',  price: 0.00),
-              OptionItem(id: 'sans_tomates',  label: 'Sans tomates',   price: 0.00),
-              OptionItem(id: 'sans_salade',   label: 'Sans salade',    price: 0.00),
-              OptionItem(id: 'sans_oignons',  label: 'Sans oignons',   price: 0.00),
+              OptionItem(id: 'avec_crudites', label: 'Avec crudités', price: 0.00),
+              OptionItem(id: 'sans_crudites', label: 'Sans crudités', price: 0.00),
+              OptionItem(id: 'sans_tomates',  label: 'Sans tomates',  price: 0.00),
+              OptionItem(id: 'sans_salade',   label: 'Sans salade',   price: 0.00),
+              OptionItem(id: 'sans_oignons',  label: 'Sans oignons',  price: 0.00),
             ],
           ),
           OptionGroup(
@@ -408,14 +408,14 @@ class _HomeState extends State<Home> {
             id: 'choix_enfant', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
             items: [
               OptionItem(id: 'cheese_menu',  label: 'Cheeseburger avec frites', price: 7.90),
-              OptionItem(id: 'nuggets_menu', label: '5 Nuggets et frites',      price: 7.90),
+              OptionItem(id: 'nuggets_menu', label: '5 Nuggets et frites',    price: 7.90),
             ],
           ),
           OptionGroup(
             id: 'crudites_enfant', title: 'Crudites', multiple: true, minSelect: 0, maxSelect: 3,
             items: [
               OptionItem(id: 'avec',          label: 'Avec crudités', price: 0.00),
-              OptionItem(id: 'sans_tomates',  label: 'Sans tomates',  price: 0.00),
+              OptionItem(id: 'sans_tomates',  label: 'Sans tomates', price: 0.00),
               OptionItem(id: 'sans_salade',   label: 'Sans salade',   price: 0.00),
             ],
           ),
@@ -509,8 +509,8 @@ class _HomeState extends State<Home> {
 }
 
 /* =======================
-   PAGE 1 : PRODUITS
-   ======================= */
+  PAGE 1 : PRODUITS
+  ======================= */
 class ProductsPage extends StatelessWidget {
   const ProductsPage({super.key});
 
@@ -570,72 +570,48 @@ class _ProductCard extends StatelessWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(24),
-      onTap: openWizard,
+      onTap: openWizard, // Kartın tamamına tıklamak yeterli
       child: Ink(
         decoration: BoxDecoration(
-          color: color.surfaceVariant, borderRadius: BorderRadius.circular(24),
+          color: color.surfaceVariant,
+          borderRadius: BorderRadius.circular(24),
         ),
-        child: Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    height: 32, width: 32,
-                    decoration: BoxDecoration(
-                      color: color.primary.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(Icons.fastfood_rounded, color: color.primary, size: 18),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(product.name,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text('${product.groups.length} groupe(s)', style: const TextStyle(fontSize: 12)),
-                  const SizedBox(height: 8),
-                ],
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                height: 32,
+                width: 32,
+                decoration: BoxDecoration(
+                  color: color.primary.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.fastfood_rounded, color: color.primary, size: 18),
               ),
-            ),
-            Positioned(
-              left: 12,
-              bottom: 12,
-              child: choisirButton(() => openWizard(), context),
-            ),
-            Positioned(
-              right: 8,
-              bottom: 8,
-              child: IconButton(
-                tooltip: 'Modifier',
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: () async {
-                  final ok = await _askPin(context);
-                  if (!ok) return;
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => CreateProductPage(
-                        onGoToTab: (_) {},
-                        editIndex: AppScope.of(context).products.indexOf(product),
-                      ),
-                    ),
-                  );
-                },
+              const SizedBox(height: 8),
+              Text(
+                product.name,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text('${product.groups.length} groupe(s)', style: const TextStyle(fontSize: 12)),
+              const SizedBox(height: 8),
+              // Burada eskiden sol altta sepet, sağ altta kalem vardı — kaldırıldı.
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
+
 /* =======================
-   PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
-   ======================= */
+  PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
+  ======================= */
 class CreateProductPage extends StatefulWidget {
   final void Function(int) onGoToTab;
   final int? editIndex;
@@ -994,8 +970,8 @@ class _OptionEditorState extends State<_OptionEditor> {
 }
 
 /* =======================
-   WIZARD
-   ======================= */
+  WIZARD
+  ======================= */
 class OrderWizard extends StatefulWidget {
   final Product product;
   final Map<String, List<OptionItem>>? initialPicked;
@@ -1400,8 +1376,8 @@ class _Summary extends StatelessWidget {
 }
 
 /* =======================
-   PAGE 3 : PANIER
-   ======================= */
+  PAGE 3 : PANIER
+  ======================= */
 class CartPage extends StatelessWidget {
   const CartPage({super.key});
   @override
@@ -1533,8 +1509,8 @@ class CartPage extends StatelessWidget {
 }
 
 /* =======================
-   PAGE 4 : COMMANDES + YAZDIRMA
-   ======================= */
+  PAGE 4 : COMMANDES + YAZDIRMA
+  ======================= */
 class OrdersPage extends StatelessWidget {
   const OrdersPage({super.key});
   @override
@@ -1663,7 +1639,7 @@ class OrdersPage extends StatelessWidget {
                                 _snack(context, 'Envoyé à l’imprimante.');
                               }
                             } catch (e) {
-                               _snack(context, 'Échec de l’impression: $e');
+                              _snack(context, 'Échec de l’impression: $e');
                             }
                           },
                           child: const Text('Imprimer'),
@@ -1683,8 +1659,8 @@ class OrdersPage extends StatelessWidget {
 }
 
 /* =======================
-   DİYALOGLAR & UTIL
-   ======================= */
+  DİYALOGLAR & UTIL
+  ======================= */
 Future<bool> _askPin(BuildContext context) async {
   final ctrl = TextEditingController();
   final ok = await showDialog<bool>(
@@ -1778,8 +1754,8 @@ void _showWarn(BuildContext context, String msg) {
 }
 
 /* =======================
-   Choisir butonu
-   ======================= */
+  Choisir butonu
+  ======================= */
 Widget choisirButton(VoidCallback onTap, BuildContext context) {
   final color = Theme.of(context).colorScheme;
   return Material(
