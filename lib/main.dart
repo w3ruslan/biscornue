@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
   ======================= */
 // LÜTFEN BU IP ADRESİNİ KENDİ YAZICINIZIN IP ADRESİYLE DEĞİŞTİRİN
 const String PRINTER_IP = '192.168.1.1'; // <-- Epson yazıcının IP'si
-const int    PRINTER_PORT = 9100;        // Genelde 9100 (RAW)
+const int PRINTER_PORT = 9100;           // Genelde 9100 (RAW)
 
 const String _ADMIN_PIN = '6538';
 
@@ -26,14 +26,13 @@ class App extends StatelessWidget {
   const App({super.key});
   @override
   Widget build(BuildContext context) {
-    // DEĞİŞİKLİK 2: Tema rengini “restauration rapide” havasına çek
     return MaterialApp(
       title: 'BISCORNUE',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFF5722), // Deep Orange 500 (ketchup aurası)
+          seedColor: const Color(0xFFFF5722), // Deep Orange 500
           brightness: Brightness.light,
         ),
       ),
@@ -60,13 +59,15 @@ class Product {
   }
 
   Map<String, dynamic> toJson() => {
-    'name': name,
-    'groups': groups.map((g) => g.toJson()).toList(),
-  };
+        'name': name,
+        'groups': groups.map((g) => g.toJson()).toList(),
+      };
   factory Product.fromJson(Map<String, dynamic> j) => Product(
-    name: j['name'],
-    groups: (j['groups'] as List? ?? []).map((e) => OptionGroup.fromJson(Map<String,dynamic>.from(e))).toList(),
-  );
+        name: j['name'],
+        groups: (j['groups'] as List? ?? [])
+            .map((e) => OptionGroup.fromJson(Map<String, dynamic>.from(e)))
+            .toList(),
+      );
 }
 
 class OptionGroup {
@@ -86,16 +87,23 @@ class OptionGroup {
   }) : items = items ?? [];
 
   Map<String, dynamic> toJson() => {
-    'id': id, 'title': title, 'multiple': multiple,
-    'min': minSelect, 'max': maxSelect,
-    'items': items.map((e) => e.toJson()).toList(),
-  };
+        'id': id,
+        'title': title,
+        'multiple': multiple,
+        'min': minSelect,
+        'max': maxSelect,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
   factory OptionGroup.fromJson(Map<String, dynamic> j) => OptionGroup(
-    id: j['id'], title: j['title'],
-    multiple: j['multiple'] ?? false,
-    minSelect: j['min'] ?? 0, maxSelect: j['max'] ?? 1,
-    items: (j['items'] as List? ?? []).map((e) => OptionItem.fromJson(Map<String,dynamic>.from(e))).toList(),
-  );
+        id: j['id'],
+        title: j['title'],
+        multiple: j['multiple'] ?? false,
+        minSelect: j['min'] ?? 0,
+        maxSelect: j['max'] ?? 1,
+        items: (j['items'] as List? ?? [])
+            .map((e) => OptionItem.fromJson(Map<String, dynamic>.from(e)))
+            .toList(),
+      );
 }
 
 class OptionItem {
@@ -116,18 +124,20 @@ class CartLine {
   double get total => product.priceForSelection(picked);
 
   Map<String, dynamic> toJson() => {
-    'product': product.toJson(),
-    'picked': {
-      for (final e in picked.entries) e.key: e.value.map((it) => it.toJson()).toList()
-    },
-  };
+        'product': product.toJson(),
+        'picked': {
+          for (final e in picked.entries) e.key: e.value.map((it) => it.toJson()).toList()
+        },
+      };
   factory CartLine.fromJson(Map<String, dynamic> j) => CartLine(
-    product: Product.fromJson(Map<String, dynamic>.from(j['product'])),
-    picked: {
-      for (final e in (j['picked'] as Map).entries)
-        e.key: (e.value as List).map((x) => OptionItem.fromJson(Map<String,dynamic>.from(x))).toList()
-    },
-  );
+        product: Product.fromJson(Map<String, dynamic>.from(j['product'])),
+        picked: {
+          for (final e in (j['picked'] as Map).entries)
+            e.key: (e.value as List)
+                .map((x) => OptionItem.fromJson(Map<String, dynamic>.from(x)))
+                .toList()
+        },
+      );
 }
 
 class SavedOrder {
@@ -147,19 +157,21 @@ class SavedOrder {
   double get total => lines.fold(0.0, (s, l) => s + l.total);
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'createdAt': createdAt.toIso8601String(),
-    'readyAt': readyAt.toIso8601String(),
-    'customer': customer,
-    'lines': lines.map((l) => l.toJson()).toList(),
-  };
+        'id': id,
+        'createdAt': createdAt.toIso8601String(),
+        'readyAt': readyAt.toIso8601String(),
+        'customer': customer,
+        'lines': lines.map((l) => l.toJson()).toList(),
+      };
   factory SavedOrder.fromJson(Map<String, dynamic> j) => SavedOrder(
-    id: j['id'],
-    createdAt: DateTime.parse(j['createdAt']),
-    readyAt: DateTime.parse(j['readyAt']),
-    customer: j['customer'] ?? '',
-    lines: (j['lines'] as List).map((e) => CartLine.fromJson(Map<String,dynamic>.from(e))).toList(),
-  );
+        id: j['id'],
+        createdAt: DateTime.parse(j['createdAt']),
+        readyAt: DateTime.parse(j['readyAt']),
+        customer: j['customer'] ?? '',
+        lines: (j['lines'] as List)
+            .map((e) => CartLine.fromJson(Map<String, dynamic>.from(e)))
+            .toList(),
+      );
 }
 
 class AppState extends ChangeNotifier {
@@ -181,7 +193,7 @@ class AppState extends ChangeNotifier {
       final list = jsonDecode(raw) as List;
       orders
         ..clear()
-        ..addAll(list.map((e) => SavedOrder.fromJson(Map<String,dynamic>.from(e))));
+        ..addAll(list.map((e) => SavedOrder.fromJson(Map<String, dynamic>.from(e))));
       notifyListeners();
     }
   }
@@ -200,22 +212,37 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addProduct(Product p) { products.add(p); notifyListeners(); }
-  void replaceProductAt(int i, Product p) { products[i] = p; notifyListeners(); }
+  void addProduct(Product p) {
+    products.add(p);
+    notifyListeners();
+  }
+
+  void replaceProductAt(int i, Product p) {
+    products[i] = p;
+    notifyListeners();
+  }
 
   void addLineToCart(Product p, Map<String, List<OptionItem>> picked) {
-    final deep = { for (final e in picked.entries) e.key: List<OptionItem>.from(e.value) };
+    final deep = {for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)};
     cart.add(CartLine(product: p, picked: deep));
     notifyListeners();
   }
-  void removeCartLineAt(int i) { if (i>=0 && i<cart.length) { cart.removeAt(i); notifyListeners(); } }
-  void clearCart() { cart.clear(); notifyListeners(); }
+
+  void removeCartLineAt(int i) {
+    if (i >= 0 && i < cart.length) {
+      cart.removeAt(i);
+      notifyListeners();
+    }
+  }
+
+  void clearCart() {
+    cart.clear();
+    notifyListeners();
+  }
 
   void updateCartLineAt(int i, Map<String, List<OptionItem>> picked) {
     if (i < 0 || i >= cart.length) return;
-    final deep = {
-      for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
-    };
+    final deep = {for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)};
     final p = cart[i].product;
     cart[i] = CartLine(product: p, picked: deep);
     notifyListeners();
@@ -224,12 +251,14 @@ class AppState extends ChangeNotifier {
   SavedOrder? finalizeCartToOrder({required String customer}) {
     if (cart.isEmpty) return null;
 
-    final deepLines = cart.map((l) => CartLine(
-      product: l.product,
-      picked: { for (final e in l.picked.entries) e.key: List<OptionItem>.from(e.value) },
-    )).toList();
+    final deepLines = cart
+        .map((l) => CartLine(
+              product: l.product,
+              picked: {for (final e in l.picked.entries) e.key: List<OptionItem>.from(e.value)},
+            ))
+        .toList();
 
-    final now   = DateTime.now();
+    final now = DateTime.now();
     final ready = now.add(Duration(minutes: prepMinutes));
 
     final order = SavedOrder(
@@ -256,51 +285,51 @@ class AppState extends ChangeNotifier {
 
 /* Ortak listeler (menü data helpers) */
 List<OptionItem> _meats(double base) => [
-  OptionItem(id: 'kebab',        label: 'Kebab',                 price: base),
-  OptionItem(id: 'steak',        label: 'Steak hache maison',    price: base),
-  OptionItem(id: 'poulet_curry', label: 'Poulet curry maison',   price: base),
-  OptionItem(id: 'tenders',      label: 'Tenders',               price: base),
-  OptionItem(id: 'cordon',       label: 'Cordon bleu',           price: base),
-  OptionItem(id: 'nuggets',      label: 'Nuggets',               price: base),
-];
+      OptionItem(id: 'kebab', label: 'Kebab', price: base),
+      OptionItem(id: 'steak', label: 'Steak hache maison', price: base),
+      OptionItem(id: 'poulet_curry', label: 'Poulet curry maison', price: base),
+      OptionItem(id: 'tenders', label: 'Tenders', price: base),
+      OptionItem(id: 'cordon', label: 'Cordon bleu', price: base),
+      OptionItem(id: 'nuggets', label: 'Nuggets', price: base),
+    ];
 
 List<OptionItem> _supps() => [
-  OptionItem(id: 'cheddar',   label: 'Cheddar',                       price: 1.50),
-  OptionItem(id: 'mozza',     label: 'Mozzarella rapee',              price: 1.50),
-  OptionItem(id: 'feta',      label: 'Feta',                          price: 1.50),
-  OptionItem(id: 'porc',      label: 'Poitrine de porc fume',         price: 1.50),
-  OptionItem(id: 'chevre',    label: 'Chevre',                        price: 1.50),
-  OptionItem(id: 'legumes',   label: 'Legumes grilles',               price: 1.50),
-  OptionItem(id: 'oeuf',      label: 'Oeuf',                          price: 1.50),
-  OptionItem(id: 'd_cheddar', label: 'Double Cheddar',                price: 3.00),
-  OptionItem(id: 'd_mozza',   label: 'Double Mozzarella rapee',       price: 3.00),
-  OptionItem(id: 'd_porc',    label: 'Double Poitrine de porc fume',price: 3.00),
-];
+      OptionItem(id: 'cheddar', label: 'Cheddar', price: 1.50),
+      OptionItem(id: 'mozza', label: 'Mozzarella rapee', price: 1.50),
+      OptionItem(id: 'feta', label: 'Feta', price: 1.50),
+      OptionItem(id: 'porc', label: 'Poitrine de porc fume', price: 1.50),
+      OptionItem(id: 'chevre', label: 'Chevre', price: 1.50),
+      OptionItem(id: 'legumes', label: 'Legumes grilles', price: 1.50),
+      OptionItem(id: 'oeuf', label: 'Oeuf', price: 1.50),
+      OptionItem(id: 'd_cheddar', label: 'Double Cheddar', price: 3.00),
+      OptionItem(id: 'd_mozza', label: 'Double Mozzarella rapee', price: 3.00),
+      OptionItem(id: 'd_porc', label: 'Double Poitrine de porc fume', price: 3.00),
+    ];
 
 List<OptionItem> _sauces() => [
-  OptionItem(id: 'sans_sauce', label: 'Sans sauce', price: 0.00),
-  OptionItem(id: 'blanche',    label: 'Blanche',    price: 0.00),
-  OptionItem(id: 'ketchup',    label: 'Ketchup',    price: 0.00),
-  OptionItem(id: 'mayo',       label: 'Mayonnaise', price: 0.00),
-  OptionItem(id: 'algerienne', label: 'Algérienne', price: 0.00),
-  OptionItem(id: 'bbq',        label: 'Barbecue',   price: 0.00),
-  OptionItem(id: 'bigburger',  label: 'Big Burger', price: 0.00),
-  OptionItem(id: 'harissa',    label: 'Harissa',    price: 0.00),
-];
+      OptionItem(id: 'sans_sauce', label: 'Sans sauce', price: 0.00),
+      OptionItem(id: 'blanche', label: 'Blanche', price: 0.00),
+      OptionItem(id: 'ketchup', label: 'Ketchup', price: 0.00),
+      OptionItem(id: 'mayo', label: 'Mayonnaise', price: 0.00),
+      OptionItem(id: 'algerienne', label: 'Algérienne', price: 0.00),
+      OptionItem(id: 'bbq', label: 'Barbecue', price: 0.00),
+      OptionItem(id: 'bigburger', label: 'Big Burger', price: 0.00),
+      OptionItem(id: 'harissa', label: 'Harissa', price: 0.00),
+    ];
 
 List<OptionItem> _tacosSauces() => [
-  ..._sauces(),
-  OptionItem(id: 'fromagere',           label: 'Sauce fromagere',           price: 0.00),
-  OptionItem(id: 'seulement_fromagere', label: 'Seulement sauce fromagere', price: 0.00),
-  OptionItem(id: 'sans_fromagere',      label: 'Sans sauce fromagere',      price: 0.00),
-];
+      ..._sauces(),
+      OptionItem(id: 'fromagere', label: 'Sauce fromagere', price: 0.00),
+      OptionItem(id: 'seulement_fromagere', label: 'Seulement sauce fromagere', price: 0.00),
+      OptionItem(id: 'sans_fromagere', label: 'Sans sauce fromagere', price: 0.00),
+    ];
 
 List<OptionItem> _formules() => [
-  OptionItem(id: 'seul',    label: 'Seul',                    price: 0.00),
-  OptionItem(id: 'frites',  label: 'Avec frites',             price: 1.00),
-  OptionItem(id: 'boisson', label: 'Avec boisson',            price: 1.00),
-  OptionItem(id: 'menu',    label: 'Avec frites et boisson',  price: 2.00),
-];
+      OptionItem(id: 'seul', label: 'Seul', price: 0.00),
+      OptionItem(id: 'frites', label: 'Avec frites', price: 1.00),
+      OptionItem(id: 'boisson', label: 'Avec boisson', price: 1.00),
+      OptionItem(id: 'menu', label: 'Avec frites et boisson', price: 2.00),
+    ];
 
 /* InheritedNotifier: global state erişimi */
 class AppScope extends InheritedNotifier<AppState> {
@@ -337,49 +366,77 @@ class _HomeState extends State<Home> {
       final products = <Product>[
         Product(name: 'Sandwich', groups: [
           OptionGroup(
-            id: 'type_sand', title: 'Sandwich', multiple: false, minSelect: 1, maxSelect: 1,
+            id: 'type_sand',
+            title: 'Sandwich',
+            multiple: false,
+            minSelect: 1,
+            maxSelect: 1,
             items: [
-              OptionItem(id: 'kebab',      label: 'Kebab',         price: 10.00),
+              OptionItem(id: 'kebab', label: 'Kebab', price: 10.00),
               OptionItem(id: 'curryosite', label: 'La Curryosite', price: 10.00),
-              OptionItem(id: 'vege',       label: 'Vegetarien',    price: 10.00),
-              OptionItem(id: 'berlineur',  label: 'Berlineur',     price: 12.00),
+              OptionItem(id: 'vege', label: 'Vegetarien', price: 10.00),
+              OptionItem(id: 'berlineur', label: 'Berlineur', price: 12.00),
             ],
           ),
           OptionGroup(
-            id: 'pain', title: 'Pain', multiple: false, minSelect: 1, maxSelect: 1,
+            id: 'pain',
+            title: 'Pain',
+            multiple: false,
+            minSelect: 1,
+            maxSelect: 1,
             items: [
-              OptionItem(id: 'pita',    label: 'Pain pita', price: 0.00),
-              OptionItem(id: 'galette', label: 'Galette',   price: 0.00),
+              OptionItem(id: 'pita', label: 'Pain pita', price: 0.00),
+              OptionItem(id: 'galette', label: 'Galette', price: 0.00),
             ],
           ),
           OptionGroup(
-            id: 'crudites', title: 'Crudites / Retirer', multiple: true, minSelect: 0, maxSelect: 4,
+            id: 'crudites',
+            title: 'Crudites / Retirer',
+            multiple: true,
+            minSelect: 0,
+            maxSelect: 4,
             items: [
               OptionItem(id: 'avec_crudites', label: 'Avec crudités', price: 0.00),
               OptionItem(id: 'sans_crudites', label: 'Sans crudités', price: 0.00),
-              OptionItem(id: 'sans_tomates',  label: 'Sans tomates',  price: 0.00),
-              OptionItem(id: 'sans_salade',   label: 'Sans salade',   price: 0.00),
-              OptionItem(id: 'sans_oignons',  label: 'Sans oignons',  price: 0.00),
+              OptionItem(id: 'sans_tomates', label: 'Sans tomates', price: 0.00),
+              OptionItem(id: 'sans_salade', label: 'Sans salade', price: 0.00),
+              OptionItem(id: 'sans_oignons', label: 'Sans oignons', price: 0.00),
             ],
           ),
           OptionGroup(
-            id: 'supp', title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3,
+            id: 'supp',
+            title: 'Supplements',
+            multiple: true,
+            minSelect: 0,
+            maxSelect: 3,
             items: _supps(),
           ),
           OptionGroup(
-            id: 'sauces', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2,
+            id: 'sauces',
+            title: 'Sauces',
+            multiple: true,
+            minSelect: 1,
+            maxSelect: 2,
             items: _sauces(),
           ),
           OptionGroup(
-            id: 'formule', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1,
+            id: 'formule',
+            title: 'Accompagnement',
+            multiple: false,
+            minSelect: 1,
+            maxSelect: 1,
             items: _formules(),
           ),
         ]),
         Product(name: 'Tacos', groups: [
           OptionGroup(
-            id: 'type_tacos', title: 'Taille', multiple: false, minSelect: 1, maxSelect: 1,
+            id: 'type_tacos',
+            title: 'Taille',
+            multiple: false,
+            minSelect: 1,
+            maxSelect: 1,
             items: [
-              OptionItem(id: 't1', label: '1 viande',  price: 10.00),
+              OptionItem(id: 't1', label: '1 viande', price: 10.00),
               OptionItem(id: 't2', label: '2 viandes', price: 12.00),
               OptionItem(id: 't3', label: '3 viandes', price: 14.00),
             ],
@@ -387,41 +444,57 @@ class _HomeState extends State<Home> {
           OptionGroup(id: 'viande1', title: 'Viande 1', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
           OptionGroup(id: 'viande2', title: 'Viande 2', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
           OptionGroup(id: 'viande3', title: 'Viande 3', multiple: false, minSelect: 1, maxSelect: 1, items: _meats(0.00)),
-          OptionGroup(id: 'supp_tacos',    title: 'Supplements',    multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
-          OptionGroup(id: 'sauce_tacos',   title: 'Sauces',         multiple: true, minSelect: 1, maxSelect: 2, items: _tacosSauces()),
+          OptionGroup(id: 'supp_tacos', title: 'Supplements', multiple: true, minSelect: 0, maxSelect: 3, items: _supps()),
+          OptionGroup(id: 'sauce_tacos', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _tacosSauces()),
           OptionGroup(id: 'formule_tacos', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
         ]),
         Product(name: 'Burgers', groups: [
           OptionGroup(
-            id: 'type_burger', title: 'Burger', multiple: false, minSelect: 1, maxSelect: 1,
+            id: 'type_burger',
+            title: 'Burger',
+            multiple: false,
+            minSelect: 1,
+            maxSelect: 1,
             items: [
-              OptionItem(id: 'la_biquette',  label: 'La Biquette',  price: 12.00),
-              OptionItem(id: 'le_majestueux',label: 'Le Majestueux',price: 12.00),
-              OptionItem(id: 'totoro',       label: 'TOTORO',       price: 13.00),
+              OptionItem(id: 'la_biquette', label: 'La Biquette', price: 12.00),
+              OptionItem(id: 'le_majestueux', label: 'Le Majestueux', price: 12.00),
+              OptionItem(id: 'totoro', label: 'TOTORO', price: 13.00),
             ],
           ),
-          OptionGroup(id: 'sauce_burger',   title: 'Sauces',         multiple: true, minSelect: 1, maxSelect: 2, items: _sauces()),
+          OptionGroup(id: 'sauce_burger', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _sauces()),
           OptionGroup(id: 'formule_burger', title: 'Accompagnement', multiple: false, minSelect: 1, maxSelect: 1, items: _formules()),
         ]),
         Product(name: 'Menu Enfant', groups: [
           OptionGroup(
-            id: 'choix_enfant', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
+            id: 'choix_enfant',
+            title: 'Choix',
+            multiple: false,
+            minSelect: 1,
+            maxSelect: 1,
             items: [
-              OptionItem(id: 'cheese_menu',  label: 'Cheeseburger avec frites', price: 7.90),
-              OptionItem(id: 'nuggets_menu', label: '5 Nuggets et frites',    price: 7.90),
+              OptionItem(id: 'cheese_menu', label: 'Cheeseburger avec frites', price: 7.90),
+              OptionItem(id: 'nuggets_menu', label: '5 Nuggets et frites', price: 7.90),
             ],
           ),
           OptionGroup(
-            id: 'crudites_enfant', title: 'Crudites', multiple: true, minSelect: 0, maxSelect: 3,
+            id: 'crudites_enfant',
+            title: 'Crudites',
+            multiple: true,
+            minSelect: 0,
+            maxSelect: 3,
             items: [
-              OptionItem(id: 'avec',          label: 'Avec crudités', price: 0.00),
-              OptionItem(id: 'sans_tomates',  label: 'Sans tomates', price: 0.00),
-              OptionItem(id: 'sans_salade',   label: 'Sans salade',   price: 0.00),
+              OptionItem(id: 'avec', label: 'Avec crudités', price: 0.00),
+              OptionItem(id: 'sans_tomates', label: 'Sans tomates', price: 0.00),
+              OptionItem(id: 'sans_salade', label: 'Sans salade', price: 0.00),
             ],
           ),
           OptionGroup(id: 'sauce_enfant', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _sauces()),
           OptionGroup(
-            id: 'boisson_enfant', title: 'Boisson', multiple: false, minSelect: 1, maxSelect: 1,
+            id: 'boisson_enfant',
+            title: 'Boisson',
+            multiple: false,
+            minSelect: 1,
+            maxSelect: 1,
             items: [
               OptionItem(id: 'sans_boisson', label: 'Sans boisson', price: 0.00),
               OptionItem(id: 'avec_boisson', label: 'Avec boisson', price: 1.00),
@@ -430,14 +503,18 @@ class _HomeState extends State<Home> {
         ]),
         Product(name: 'Petit Faim', groups: [
           OptionGroup(
-            id: 'choix_pf', title: 'Choix', multiple: false, minSelect: 1, maxSelect: 1,
+            id: 'choix_pf',
+            title: 'Choix',
+            multiple: false,
+            minSelect: 1,
+            maxSelect: 1,
             items: [
-              OptionItem(id: 'frites_p',  label: 'Frites petite portion', price: 3.00),
-              OptionItem(id: 'frites_g',  label: 'Frites grande portion', price: 6.00),
-              OptionItem(id: 'tenders3',  label: '3 Tenders',             price: 5.00),
-              OptionItem(id: 'tenders6',  label: '6 Tenders',             price: 10.00),
-              OptionItem(id: 'nuggets6',  label: '6 Nuggets',             price: 4.00),
-              OptionItem(id: 'nuggets12', label: '12 Nuggets',            price: 8.00),
+              OptionItem(id: 'frites_p', label: 'Frites petite portion', price: 3.00),
+              OptionItem(id: 'frites_g', label: 'Frites grande portion', price: 6.00),
+              OptionItem(id: 'tenders3', label: '3 Tenders', price: 5.00),
+              OptionItem(id: 'tenders6', label: '6 Tenders', price: 10.00),
+              OptionItem(id: 'nuggets6', label: '6 Nuggets', price: 4.00),
+              OptionItem(id: 'nuggets12', label: '12 Nuggets', price: 8.00),
             ],
           ),
           OptionGroup(id: 'sauce_pf', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _sauces()),
@@ -454,18 +531,16 @@ class _HomeState extends State<Home> {
     final totalCart = app.cart.fold(0.0, (s, l) => s + l.total);
     final cartBadge = app.cart.length;
 
-    // DEĞİŞİKLİK 1A: pages dizisi (Créer en sona)
     final pages = [
-      const ProductsPage(),                       // 0: Produits
-      const CartPage(),                           // 1: Panier
-      const OrdersPage(),                         // 2: Commandes
+      const ProductsPage(), // 0: Produits
+      const CartPage(), // 1: Panier
+      const OrdersPage(), // 2: Commandes
       CreateProductPage(onGoToTab: (i) => setState(() => index = i)), // 3: Créer
     ];
 
     return Scaffold(
       appBar: AppBar(title: const Text('BISCORNUE')),
       body: pages[index],
-      // DEĞİŞİKLİK 1B & 1C: NavigationBar.destinations ve onDestinationSelected güncellendi
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         destinations: [
@@ -477,7 +552,8 @@ class _HomeState extends State<Home> {
                 const Icon(Icons.shopping_bag_outlined),
                 if (cartBadge > 0)
                   Positioned(
-                    right: -6, top: -6,
+                    right: -6,
+                    top: -6,
                     child: Container(
                       padding: const EdgeInsets.all(3),
                       decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.red),
@@ -492,12 +568,10 @@ class _HomeState extends State<Home> {
           const NavigationDestination(icon: Icon(Icons.add_box_outlined), label: 'Créer'),
         ],
         onDestinationSelected: (i) async {
-          // Yalnızca "Créer" sekmesi PIN istesin (artık index 3)
           if (i == 3) {
             final ok = await _askPin(context);
             if (!ok) return;
           }
-          // Panier'e geçerken eski snack'leri kapat (artık index 1)
           if (i == 1) {
             ScaffoldMessenger.of(context).hideCurrentSnackBar();
           }
@@ -570,7 +644,7 @@ class _ProductCard extends StatelessWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(24),
-      onTap: openWizard, // Kartın tamamına tıklamak yeterli
+      onTap: openWizard,
       child: Ink(
         decoration: BoxDecoration(
           color: color.surfaceVariant,
@@ -596,10 +670,8 @@ class _ProductCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: 4),
-              Text('${product.groups.length} groupe(s)', style: const TextStyle(fontSize: 12)),
-              const SizedBox(height: 8),
-              // Burada eskiden sol altta sepet, sağ altta kalem vardı — kaldırıldı.
+              const SizedBox(height: 12),
+              // "groupe(s)" satırı kaldırıldı.
             ],
           ),
         ),
@@ -607,7 +679,6 @@ class _ProductCard extends StatelessWidget {
     );
   }
 }
-
 
 /* =======================
   PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
@@ -654,9 +725,13 @@ class _CreateProductPageState extends State<CreateProductPage> {
   }
 
   OptionGroup _copyGroup(OptionGroup g) => OptionGroup(
-    id: g.id, title: g.title, multiple: g.multiple, minSelect: g.minSelect, maxSelect: g.maxSelect,
-    items: g.items.map((e) => OptionItem(id: e.id, label: e.label, price: e.price)).toList(),
-  );
+        id: g.id,
+        title: g.title,
+        multiple: g.multiple,
+        minSelect: g.minSelect,
+        maxSelect: g.maxSelect,
+        items: g.items.map((e) => OptionItem(id: e.id, label: e.label, price: e.price)).toList(),
+      );
 
   void addGroup() {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
@@ -666,23 +741,45 @@ class _CreateProductPageState extends State<CreateProductPage> {
 
   void saveProduct() {
     final app = AppScope.of(context);
-    if (nameCtrl.text.trim().isEmpty) { _snack(context, 'Nom du produit requis.'); return; }
+    if (nameCtrl.text.trim().isEmpty) {
+      _snack(context, 'Nom du produit requis.');
+      return;
+    }
     for (final g in editingGroups) {
-      if (g.title.trim().isEmpty) { _snack(context, 'Titre du groupe manquant.'); return; }
-      if (g.items.isEmpty) { _snack(context, 'Ajoutez au moins une option dans "${g.title}".'); return; }
+      if (g.title.trim().isEmpty) {
+        _snack(context, 'Titre du groupe manquant.');
+        return;
+      }
+      if (g.items.isEmpty) {
+        _snack(context, 'Ajoutez au moins une option dans "${g.title}".');
+        return;
+      }
       if (g.minSelect < 0 || g.maxSelect < 1 || g.minSelect > g.maxSelect) {
-        _snack(context, 'Règles min/max invalides dans "${g.title}".'); return;
+        _snack(context, 'Règles min/max invalides dans "${g.title}".');
+        return;
       }
       if (!g.multiple && (g.minSelect != 1 || g.maxSelect != 1)) {
-        _snack(context, 'Choix unique doit avoir min=1 et max=1 (${g.title}).'); return;
+        _snack(context, 'Choix unique doit avoir min=1 et max=1 (${g.title}).');
+        return;
       }
     }
     final p = Product(name: nameCtrl.text.trim(), groups: List.of(editingGroups));
-    if (editingIndex == null) { app.addProduct(p); _snack(context, 'Produit créé.'); }
-    else { app.replaceProductAt(editingIndex!, p); _snack(context, 'Produit mis à jour.'); }
-    nameCtrl.text = ''; editingGroups.clear(); setState(() => editingIndex = null);
+    if (editingIndex == null) {
+      app.addProduct(p);
+      _snack(context, 'Produit créé.');
+    } else {
+      app.replaceProductAt(editingIndex!, p);
+      _snack(context, 'Produit mis à jour.');
+    }
+    nameCtrl.text = '';
+    editingGroups.clear();
+    setState(() => editingIndex = null);
 
-    if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      widget.onGoToTab(0);
+    }
   }
 
   @override
@@ -692,19 +789,36 @@ class _CreateProductPageState extends State<CreateProductPage> {
       padding: const EdgeInsets.all(12),
       children: [
         Row(children: [
-          IconButton(icon: const Icon(Icons.arrow_back), onPressed: () {
-            if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
-          }, tooltip: 'Retour'),
+          IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              } else {
+                widget.onGoToTab(0);
+              }
+            },
+            tooltip: 'Retour',
+          ),
           const SizedBox(width: 8),
-          Text(editingIndex == null ? 'Créer un produit' : 'Modifier un produit',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(
+            editingIndex == null ? 'Créer un produit' : 'Modifier un produit',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           const Spacer(),
           TextButton.icon(
             onPressed: () {
-              nameCtrl.text = ''; editingGroups.clear(); setState(() => editingIndex = null);
-              if (Navigator.of(context).canPop()) Navigator.of(context).pop(); else widget.onGoToTab(0);
+              nameCtrl.text = '';
+              editingGroups.clear();
+              setState(() => editingIndex = null);
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              } else {
+                widget.onGoToTab(0);
+              }
             },
-            icon: const Icon(Icons.close), label: const Text('Annuler'),
+            icon: const Icon(Icons.close),
+            label: const Text('Annuler'),
           ),
         ]),
         const SizedBox(height: 12),
@@ -749,7 +863,8 @@ class _CreateProductPageState extends State<CreateProductPage> {
           const Text('Produits existants', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           ListView.separated(
-            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: app.products.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (_, i) {
@@ -759,17 +874,22 @@ class _CreateProductPageState extends State<CreateProductPage> {
                 title: Text(p.name),
                 subtitle: Text('${p.groups.length} groupe(s)'),
                 trailing: FilledButton.tonalIcon(
-                  icon: const Icon(Icons.edit), label: const Text('Modifier'),
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Modifier'),
                   onPressed: () => _loadForEdit(i),
                 ),
               );
             },
           ),
-          const SizedBox(height: 16), const Divider(), const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 12),
         ],
 
-        TextField(controller: nameCtrl,
-            decoration: const InputDecoration(labelText: 'Nom du produit', border: OutlineInputBorder())),
+        TextField(
+          controller: nameCtrl,
+          decoration: const InputDecoration(labelText: 'Nom du produit', border: OutlineInputBorder()),
+        ),
         const SizedBox(height: 12),
         Row(children: [
           FilledButton.icon(onPressed: addGroup, icon: const Icon(Icons.add), label: const Text('Ajouter un groupe')),
@@ -837,7 +957,10 @@ class _GroupEditorState extends State<_GroupEditor> {
   int get _mode => widget.group.multiple ? 1 : 0;
   set _mode(int v) {
     widget.group.multiple = (v == 1);
-    if (v == 0) { minCtrl.text = '1'; maxCtrl.text = '1'; }
+    if (v == 0) {
+      minCtrl.text = '1';
+      maxCtrl.text = '1';
+    }
     apply();
     setState(() {});
   }
@@ -845,7 +968,8 @@ class _GroupEditorState extends State<_GroupEditor> {
   void addOption() {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     widget.group.items.add(OptionItem(id: id, label: 'Nouvelle option', price: 0));
-    widget.onChanged(); setState(() {});
+    widget.onChanged();
+    setState(() {});
   }
 
   @override
@@ -871,7 +995,9 @@ class _GroupEditorState extends State<_GroupEditor> {
                 DropdownMenuItem(value: 0, child: Text('Choix unique')),
                 DropdownMenuItem(value: 1, child: Text('Choix multiple')),
               ],
-              onChanged: (v) { if (v != null) _mode = v; },
+              onChanged: (v) {
+                if (v != null) _mode = v;
+              },
             ),
             const SizedBox(width: 8),
             IconButton(onPressed: widget.onDelete, icon: const Icon(Icons.delete_outline)),
@@ -880,7 +1006,8 @@ class _GroupEditorState extends State<_GroupEditor> {
           Row(children: [
             Expanded(
               child: TextField(
-                controller: minCtrl, keyboardType: TextInputType.number,
+                controller: minCtrl,
+                keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'Sélection min', border: OutlineInputBorder()),
                 onChanged: (_) => apply(),
               ),
@@ -888,7 +1015,8 @@ class _GroupEditorState extends State<_GroupEditor> {
             const SizedBox(width: 8),
             Expanded(
               child: TextField(
-                controller: maxCtrl, keyboardType: TextInputType.number,
+                controller: maxCtrl,
+                keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'Sélection max', border: OutlineInputBorder()),
                 onChanged: (_) => apply(),
               ),
@@ -901,8 +1029,15 @@ class _GroupEditorState extends State<_GroupEditor> {
             _OptionEditor(
               key: ValueKey(g.items[i].id),
               item: g.items[i],
-              onDelete: () { g.items.removeAt(i); widget.onChanged(); setState(() {}); },
-              onChanged: () { widget.onChanged(); setState(() {}); },
+              onDelete: () {
+                g.items.removeAt(i);
+                widget.onChanged();
+                setState(() {});
+              },
+              onChanged: () {
+                widget.onChanged();
+                setState(() {});
+              },
             ),
         ]),
       ),
@@ -941,6 +1076,7 @@ class _OptionEditorState extends State<_OptionEditor> {
     widget.item.price = double.tryParse(priceCtrl.text.replaceAll(',', '.')) ?? 0.0;
     widget.onChanged();
   }
+
   @override
   Widget build(BuildContext context) {
     return ListTile(
@@ -1004,8 +1140,7 @@ class _OrderWizardState extends State<OrderWizard> {
 
   List<OptionGroup> _groupsForVisibility(List<OptionGroup> base) {
     if (widget.product.name == 'Menu Enfant') {
-      final cheese = (picked['choix_enfant'] ?? const <OptionItem>[])
-          .any((it) => it.id == 'cheese_menu');
+      final cheese = (picked['choix_enfant'] ?? const <OptionItem>[]).any((it) => it.id == 'cheese_menu');
       return base.where((g) {
         if (g.id == 'crudites_enfant') return cheese;
         return true;
@@ -1028,15 +1163,16 @@ class _OrderWizardState extends State<OrderWizard> {
     return base;
   }
 
-  void _toggleSingle(OptionGroup g, OptionItem it) { picked[g.id] = [it]; setState(() {}); }
+  void _toggleSingle(OptionGroup g, OptionItem it) {
+    picked[g.id] = [it];
+    setState(() {});
+  }
 
   void _toggleMulti(OptionGroup g, OptionItem it) {
     final list = List<OptionItem>.from(picked[g.id] ?? []);
     bool isCrud = g.id == 'crudites' || g.id == 'crudites_enfant';
-    bool isSauceGroup = g.id == 'sauces' ||
-        g.id == 'sauce_burger' ||
-        g.id == 'sauce_pf' ||
-        g.id == 'sauce_enfant';
+    bool isSauceGroup =
+        g.id == 'sauces' || g.id == 'sauce_burger' || g.id == 'sauce_pf' || g.id == 'sauce_enfant';
     bool isTacosSauce = g.id == 'sauce_tacos';
 
     bool exists = list.any((e) => e.id == it.id);
@@ -1044,9 +1180,14 @@ class _OrderWizardState extends State<OrderWizard> {
     bool isSansCrud = it.id == 'sans_crudites';
     bool isAvecCrud = it.id == 'avec_crudites' || it.id == 'avec';
     if (isCrud && (isSansCrud || isAvecCrud)) {
-      if (exists) { list.removeWhere((e) => e.id == it.id); picked[g.id] = list; }
-      else { picked[g.id] = [it]; }
-      setState((){}); return;
+      if (exists) {
+        list.removeWhere((e) => e.id == it.id);
+        picked[g.id] = list;
+      } else {
+        picked[g.id] = [it];
+      }
+      setState(() {});
+      return;
     }
     if (isCrud) {
       list.removeWhere((e) => e.id == 'sans_crudites' || e.id == 'avec_crudites' || e.id == 'avec');
@@ -1054,9 +1195,13 @@ class _OrderWizardState extends State<OrderWizard> {
 
     if (isSauceGroup) {
       if (it.id == 'sans_sauce') {
-        if (exists) list.removeWhere((e) => e.id == 'sans_sauce');
-        else picked[g.id] = [it];
-        setState((){}); return;
+        if (exists) {
+          list.removeWhere((e) => e.id == 'sans_sauce');
+        } else {
+          picked[g.id] = [it];
+        }
+        setState(() {});
+        return;
       } else {
         list.removeWhere((e) => e.id == 'sans_sauce');
       }
@@ -1064,9 +1209,16 @@ class _OrderWizardState extends State<OrderWizard> {
 
     if (isTacosSauce) {
       if (it.id == 'sans_sauce' || it.id == 'seulement_fromagere') {
-        if (exists) list.removeWhere((e) => e.id == it.id);
-        else { picked[g.id] = [it]; setState((){}); return; }
-        picked[g.id] = list; setState((){}); return;
+        if (exists) {
+          list.removeWhere((e) => e.id == it.id);
+        } else {
+          picked[g.id] = [it];
+          setState(() {});
+          return;
+        }
+        picked[g.id] = list;
+        setState(() {});
+        return;
       }
       if (it.id == 'fromagere') {
         if (list.any((e) => e.id == 'sans_fromagere')) return;
@@ -1075,11 +1227,17 @@ class _OrderWizardState extends State<OrderWizard> {
         if (exists) {
           list.removeWhere((e) => e.id == 'sans_fromagere');
         } else {
-          list.removeWhere((e) => e.id == 'fromagere' || e.id == 'seulement_fromagere' || e.id == 'sans_sauce');
-          if (list.length >= g.maxSelect) { setState((){}); return; }
+          list.removeWhere(
+              (e) => e.id == 'fromagere' || e.id == 'seulement_fromagere' || e.id == 'sans_sauce');
+          if (list.length >= g.maxSelect) {
+            setState(() {});
+            return;
+          }
           list.add(it);
         }
-        picked[g.id] = list; setState((){}); return;
+        picked[g.id] = list;
+        setState(() {});
+        return;
       }
       list.removeWhere((e) => e.id == 'sans_sauce' || e.id == 'seulement_fromagere');
     }
@@ -1087,7 +1245,10 @@ class _OrderWizardState extends State<OrderWizard> {
     if (exists) {
       list.removeWhere((e) => e.id == it.id);
     } else {
-      if (list.length >= g.maxSelect) { setState((){}); return; }
+      if (list.length >= g.maxSelect) {
+        setState(() {});
+        return;
+      }
       list.add(it);
     }
     picked[g.id] = list;
@@ -1118,9 +1279,8 @@ class _OrderWizardState extends State<OrderWizard> {
     Future<void> goNext() async {
       if (isSummary) {
         if (widget.editMode) {
-          final result = {
-            for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)
-          };
+          final result = {for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)};
+          // ignore: use_build_context_synchronously
           Navigator.pop(context, result);
         } else {
           final app = AppScope.of(context);
@@ -1221,10 +1381,7 @@ class _GroupStep extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
           child: Text(
-            group.title +
-                (group.multiple
-                    ? '  (min ${group.minSelect}, max ${group.maxSelect})'
-                    : ''),
+            group.title + (group.multiple ? '  (min ${group.minSelect}, max ${group.maxSelect})' : ''),
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ),
@@ -1257,8 +1414,8 @@ class _GroupStep extends StatelessWidget {
                   final sansOn = isCrudGroup && selectedList.any((e) => isSansId(e.id));
                   final atMax = group.multiple && selectedList.length >= group.maxSelect;
 
-                  bool cruditesHardLock = isCrudGroup && (avecOn || sansOn)
-                      && !((avecOn && isAvecId(it.id)) || (sansOn && isSansId(it.id)));
+                  bool cruditesHardLock =
+                      isCrudGroup && (avecOn || sansOn) && !((avecOn && isAvecId(it.id)) || (sansOn && isSansId(it.id)));
                   bool limitLock = group.multiple && atMax && !isSelected;
                   final disabled = cruditesHardLock || limitLock;
 
@@ -1538,7 +1695,8 @@ class OrdersPage extends StatelessWidget {
             const SizedBox(width: 8),
             TextButton.icon(
               onPressed: () async {
-                final pinOk = await _askPin(context); if (!pinOk) return;
+                final pinOk = await _askPin(context);
+                if (!pinOk) return;
                 final ok = await showDialog<bool>(
                   context: context,
                   builder: (_) => AlertDialog(
@@ -1583,71 +1741,73 @@ class OrdersPage extends StatelessWidget {
                   tooltip: 'Imprimer',
                 ),
                 onTap: () {
-                  showDialog(context: context, builder: (_) {
-                    return AlertDialog(
-                      title: const Text('Détails de la commande'),
-                      content: SizedBox(
-                        width: 360,
-                        child: ListView(
-                          shrinkWrap: true,
-                          children: [
-                            if (o.customer.isNotEmpty)
+                  showDialog(
+                    context: context,
+                    builder: (_) {
+                      return AlertDialog(
+                        title: const Text('Détails de la commande'),
+                        content: SizedBox(
+                          width: 360,
+                          child: ListView(
+                            shrinkWrap: true,
+                            children: [
+                              if (o.customer.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Text('Client: ${o.customer}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                ),
                               Padding(
-                                padding: const EdgeInsets.only(bottom: 4),
-                                child: Text('Client: ${o.customer}',
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Text('Prêt à: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}',
                                     style: const TextStyle(fontWeight: FontWeight.bold)),
                               ),
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Text('Prêt à: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold)),
-                            ),
-                            for (int idx = 0; idx < o.lines.length; idx++) ...[
-                              Text('Article ${idx+1}: ${o.lines[idx].product.name}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold)),
-                              for (final g in o.lines[idx].product.groups)
-                                if ((o.lines[idx].picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
-                                  Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  for (final it in (o.lines[idx].picked[g.id] ?? const <OptionItem>[]))
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text('• ${it.label}'),
-                                        Text(it.price == 0 ? '€0.00' : '€${it.price.toStringAsFixed(2)}'),
-                                      ],
-                                    ),
-                                ],
-                              const Divider(),
-                            ],
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold)),
-                                Text('€${o.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              for (int idx = 0; idx < o.lines.length; idx++) ...[
+                                Text('Article ${idx + 1}: ${o.lines[idx].product.name}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                                for (final g in o.lines[idx].product.groups)
+                                  if ((o.lines[idx].picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
+                                    Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    for (final it in (o.lines[idx].picked[g.id] ?? const <OptionItem>[]))
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text('• ${it.label}'),
+                                          Text(it.price == 0 ? '€0.00' : '€${it.price.toStringAsFixed(2)}'),
+                                        ],
+                                      ),
+                                  ],
+                                const Divider(),
                               ],
-                            ),
-                          ],
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  Text('€${o.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () async {
-                            try {
-                              await printOrderAndroid(o);
-                              if (context.mounted) {
-                                Navigator.pop(context);
-                                _snack(context, 'Envoyé à l’imprimante.');
+                        actions: [
+                          TextButton(
+                            onPressed: () async {
+                              try {
+                                await printOrderAndroid(o);
+                                if (context.mounted) {
+                                  Navigator.pop(context);
+                                  _snack(context, 'Envoyé à l’imprimante.');
+                                }
+                              } catch (e) {
+                                _snack(context, 'Échec de l’impression: $e');
                               }
-                            } catch (e) {
-                              _snack(context, 'Échec de l’impression: $e');
-                            }
-                          },
-                          child: const Text('Imprimer'),
-                        ),
-                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fermer')),
-                      ],
-                    );
-                  });
+                            },
+                            child: const Text('Imprimer'),
+                          ),
+                          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fermer')),
+                        ],
+                      );
+                    },
+                  );
                 },
               );
             },
@@ -1668,7 +1828,10 @@ Future<bool> _askPin(BuildContext context) async {
     builder: (ctx) => AlertDialog(
       title: const Text('Code PIN requis'),
       content: TextField(
-        controller: ctrl, keyboardType: TextInputType.number, obscureText: true, maxLength: 8,
+        controller: ctrl,
+        keyboardType: TextInputType.number,
+        obscureText: true,
+        maxLength: 8,
         decoration: const InputDecoration(labelText: 'Entrez le code', border: OutlineInputBorder()),
       ),
       actions: [
@@ -1696,7 +1859,8 @@ Future<String?> _askCustomerName(BuildContext context) async {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                controller: ctrl, autofocus: true,
+                controller: ctrl,
+                autofocus: true,
                 decoration: InputDecoration(
                   labelText: 'Écrire le nom',
                   border: const OutlineInputBorder(),
@@ -1717,7 +1881,10 @@ Future<String?> _askCustomerName(BuildContext context) async {
             FilledButton(
               onPressed: () {
                 final name = ctrl.text.trim();
-                if (name.isEmpty) { setState(() => error = 'Le nom est requis.'); return; }
+                if (name.isEmpty) {
+                  setState(() => error = 'Le nom est requis.');
+                  return;
+                }
                 Navigator.pop(ctx, name);
               },
               child: const Text('Valider'),
@@ -1765,7 +1932,8 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
       customBorder: const CircleBorder(),
       onTap: onTap,
       child: const SizedBox(
-        height: 40, width: 40,
+        height: 40,
+        width: 40,
         child: Icon(Icons.shopping_cart_outlined, color: Colors.white, size: 20),
       ),
     ),
@@ -1777,7 +1945,6 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
 // ==================================================
 String _two(int n) => n.toString().padLeft(2, '0');
 String _formatEuro(double v) => '€${v.toStringAsFixed(2)}';
-
 String _money(double v) => '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
 
 String _rightLine(String left, String right, {int width = 32}) {
@@ -1790,28 +1957,59 @@ String _rightLine(String left, String right, {int width = 32}) {
 }
 
 void _cmd(Socket s, List<int> bytes) => s.add(bytes);
-void _boldOn(Socket s)  => _cmd(s, [27, 69, 1]);
+void _boldOn(Socket s) => _cmd(s, [27, 69, 1]);
 void _boldOff(Socket s) => _cmd(s, [27, 69, 0]);
 void _size(Socket s, int n) => _cmd(s, [29, 33, n]);
-void _alignLeft(Socket s)   => _cmd(s, [27, 97, 0]);
+void _alignLeft(Socket s) => _cmd(s, [27, 97, 0]);
 void _alignCenter(Socket s) => _cmd(s, [27, 97, 1]);
-void _alignRight(Socket s)  => _cmd(s, [27, 97, 2]);
+void _alignRight(Socket s) => _cmd(s, [27, 97, 2]);
 
 void _writeCp1252(Socket socket, String text) {
   final out = <int>[];
   for (final r in text.runes) {
-    if (r == 0x20AC) { out.add(0x80); continue; }
-    if (r <= 0x7F)   { out.add(r); continue; }
+    if (r == 0x20AC) {
+      out.add(0x80);
+      continue;
+    }
+    if (r <= 0x7F) {
+      out.add(r);
+      continue;
+    }
     final ch = String.fromCharCode(r);
     const repl = {
-      'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O',
-      'ş':'s','Ş':'S','ü':'u','Ü':'U','é':'e','è':'e','ê':'e','á':'a','à':'a','â':'a',
-      'ô':'o','ù':'u','–':'-','—':'-','…':'...',
-      'Œ':'Oe','œ':'oe',
+      'ç': 'c',
+      'Ç': 'C',
+      'ğ': 'g',
+      'Ğ': 'G',
+      'ı': 'i',
+      'İ': 'I',
+      'ö': 'o',
+      'Ö': 'O',
+      'ş': 's',
+      'Ş': 'S',
+      'ü': 'u',
+      'Ü': 'U',
+      'é': 'e',
+      'è': 'e',
+      'ê': 'e',
+      'á': 'a',
+      'à': 'a',
+      'â': 'a',
+      'ô': 'o',
+      'ù': 'u',
+      '–': '-',
+      '—': '-',
+      '…': '...',
+      'Œ': 'Oe',
+      'œ': 'oe',
     };
     final s = repl[ch] ?? '?';
     for (final cu in s.codeUnits) {
-      if (cu == 0x20AC) { out.add(0x80); } else { out.add(cu <= 0x7F ? cu : 0x3F); }
+      if (cu == 0x20AC) {
+        out.add(0x80);
+      } else {
+        out.add(cu <= 0x7F ? cu : 0x3F);
+      }
     }
   }
   socket.add(out);
@@ -1820,8 +2018,8 @@ void _writeCp1252(Socket socket, String text) {
 Future<void> printOrderAndroid(SavedOrder o) async {
   final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
 
-  _cmd(socket, [27, 64]);
-  _cmd(socket, [27, 116, 16]);
+  _cmd(socket, [27, 64]); // init
+  _cmd(socket, [27, 116, 16]); // CP1252
 
   _alignCenter(socket);
   _size(socket, 17);
@@ -1874,6 +2072,7 @@ Future<void> printOrderAndroid(SavedOrder o) async {
   _size(socket, 0);
   _boldOff(socket);
 
+  // feed & cut
   _cmd(socket, [10, 10, 29, 86, 66, 0]);
 
   await socket.flush();
