@@ -248,7 +248,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  SavedOrder? finalizeCartToOrder({required String customer}) {
+  SavedOrder? finalizeCartToOrder({
+    required String customer,
+    DateTime? readyAtOverride,
+  }) {
     if (cart.isEmpty) return null;
 
     final deepLines = cart
@@ -259,7 +262,7 @@ class AppState extends ChangeNotifier {
         .toList();
 
     final now = DateTime.now();
-    final ready = now.add(Duration(minutes: prepMinutes));
+    final ready = readyAtOverride ?? now.add(Duration(minutes: prepMinutes));
 
     final order = SavedOrder(
       id: now.millisecondsSinceEpoch.toString(),
@@ -822,7 +825,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
           ),
         ]),
         const SizedBox(height: 12),
-
         Card(
           margin: const EdgeInsets.only(bottom: 12),
           child: Padding(
@@ -858,7 +860,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
             ),
           ),
         ),
-
         if (app.products.isNotEmpty) ...[
           const Text('Produits existants', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
@@ -885,7 +886,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
           const Divider(),
           const SizedBox(height: 12),
         ],
-
         TextField(
           controller: nameCtrl,
           decoration: const InputDecoration(labelText: 'Nom du produit', border: OutlineInputBorder()),
@@ -897,7 +897,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
           OutlinedButton.icon(onPressed: saveProduct, icon: const Icon(Icons.save), label: const Text('Enregistrer')),
         ]),
         const SizedBox(height: 12),
-
         for (int i = 0; i < editingGroups.length; i++)
           _GroupEditor(
             key: ValueKey(editingGroups[i].id),
@@ -905,7 +904,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
             onDelete: () => setState(() => editingGroups.removeAt(i)),
             onChanged: () => setState(() {}),
           ),
-
         if (editingGroups.isEmpty)
           const Padding(
             padding: EdgeInsets.only(top: 24),
@@ -1640,9 +1638,12 @@ class CartPage extends StatelessWidget {
               final name = await _askCustomerName(context);
               if (name == null) return;
 
-              final app = AppScope.of(context);
-              final order = app.finalizeCartToOrder(customer: name);
+              // ŞİMDİ SAATİ SOR (alt sınır: şimdi + prepMinutes)
+              final readyAt = await _askReadyTime(context);
+              if (readyAt == null) return;
 
+              final app = AppScope.of(context);
+              final order = app.finalizeCartToOrder(customer: name, readyAtOverride: readyAt);
               if (order == null) return;
 
               try {
@@ -1896,6 +1897,57 @@ Future<String?> _askCustomerName(BuildContext context) async {
   );
 }
 
+Future<DateTime?> _askReadyTime(BuildContext context) async {
+  final app = AppScope.of(context);
+  final now = DateTime.now();
+  final minDT = now.add(Duration(minutes: app.prepMinutes)); // alt sınır
+
+  // 24 saat formatını zorla
+  TimeOfDay initial = TimeOfDay(hour: minDT.hour, minute: minDT.minute);
+
+  while (true) {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      helpText: 'Heure de retrait (au plus tôt ${_two(minDT.hour)}:${_two(minDT.minute)})',
+      builder: (ctx, child) {
+        return MediaQuery(
+          data: MediaQuery.of(ctx!).copyWith(alwaysUse24HourFormat: true),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked == null) return null; // vazgeçti
+
+    final pickedDT = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      picked.hour,
+      picked.minute,
+    );
+
+    // KURAL: min saatten daha erken OLAMAZ
+    if (pickedDT.isBefore(minDT)) {
+      // kısa uyarı + döngü devam (yeniden seçtireceğiz)
+      if (context.mounted) {
+        _snack(
+          context,
+          'Vous ne pouvez pas choisir avant ${_two(minDT.hour)}:${_two(minDT.minute)}.',
+          ms: 1800,
+        );
+      }
+      // Sonraki açılışta da minimumu başlangıç yapalım
+      initial = TimeOfDay(hour: minDT.hour, minute: minDT.minute);
+      continue;
+    }
+
+    // Geçerli seçim
+    return pickedDT;
+  }
+}
+
 void _snack(BuildContext context, String msg, {int ms = 1200}) {
   if (!context.mounted) return;
   final bottomInset = MediaQuery.of(context).padding.bottom;
@@ -1964,6 +2016,14 @@ void _alignLeft(Socket s) => _cmd(s, [27, 97, 0]);
 void _alignCenter(Socket s) => _cmd(s, [27, 97, 1]);
 void _alignRight(Socket s) => _cmd(s, [27, 97, 2]);
 
+void _strongLine(Socket s, String text) {
+  _boldOn(s);
+  _size(s, 1); // bir boy büyüt (sadece genişlik)
+  _writeCp1252(s, text.toUpperCase() + '\n');
+  _size(s, 0); // normale dön
+  _boldOff(s);
+}
+
 void _writeCp1252(Socket socket, String text) {
   final out = <int>[];
   for (final r in text.runes) {
@@ -1977,31 +2037,20 @@ void _writeCp1252(Socket socket, String text) {
     }
     final ch = String.fromCharCode(r);
     const repl = {
-      'ç': 'c',
-      'Ç': 'C',
-      'ğ': 'g',
-      'Ğ': 'G',
-      'ı': 'i',
-      'İ': 'I',
-      'ö': 'o',
-      'Ö': 'O',
-      'ş': 's',
-      'Ş': 'S',
-      'ü': 'u',
-      'Ü': 'U',
-      'é': 'e',
-      'è': 'e',
-      'ê': 'e',
-      'á': 'a',
-      'à': 'a',
-      'â': 'a',
-      'ô': 'o',
-      'ù': 'u',
-      '–': '-',
-      '—': '-',
-      '…': '...',
-      'Œ': 'Oe',
+      // Küçük harfler
+      'ç': 'c', 'ğ': 'g', 'ı': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u',
+      'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+      'á': 'a', 'à': 'a', 'â': 'a', 'ä': 'a',
+      'ô': 'o', 'ù': 'u', 'û': 'u', 'î': 'i', 'ï': 'i',
       'œ': 'oe',
+      // Büyük harfler
+      'Ç': 'C', 'Ğ': 'G', 'İ': 'I', 'Ö': 'O', 'Ş': 'S', 'Ü': 'U',
+      'É': 'E', 'È': 'E', 'Ê': 'E', 'Ë': 'E',
+      'Á': 'A', 'À': 'A', 'Â': 'A', 'Ä': 'A',
+      'Ô': 'O', 'Ù': 'U', 'Û': 'U', 'Î': 'I', 'Ï': 'I',
+      'Œ': 'OE',
+      // Diğer
+      '–': '-', '—': '-', '…': '...',
     };
     final s = repl[ch] ?? '?';
     for (final cu in s.codeUnits) {
@@ -2048,14 +2097,18 @@ Future<void> printOrderAndroid(SavedOrder o) async {
   for (int i = 0; i < o.lines.length; i++) {
     final l = o.lines[i];
 
-    _writeCp1252(socket, _rightLine(l.product.name, _money(l.total)) + '\n');
+    // Ürün adını büyük/kalın bas
+    _strongLine(socket, _rightLine(l.product.name, _money(l.total)));
 
     for (final g in l.product.groups) {
       final sel = l.picked[g.id] ?? const <OptionItem>[];
       if (sel.isNotEmpty) {
+        // Grup başlığını ince yaz
         _writeCp1252(socket, '  ${g.title}:\n');
+
+        // Seçimleri büyük/kalın bas
         for (final it in sel) {
-          _writeCp1252(socket, '    * ${it.label}\n');
+          _strongLine(socket, '    * ${it.label}');
         }
       }
     }
