@@ -11,6 +11,7 @@ const String PRINTER_IP = '192.168.1.1'; // <-- Epson yazıcının IP'si
 const int PRINTER_PORT = 9100;           // Genelde 9100 (RAW)
 
 const String _ADMIN_PIN = '6538';
+const int EARLY_TOLERANCE_MIN = 5; // 5 dakika erken alma toleransı
 
 /* =======================
   ENTRY
@@ -1900,16 +1901,22 @@ Future<String?> _askCustomerName(BuildContext context) async {
 Future<DateTime?> _askReadyTime(BuildContext context) async {
   final app = AppScope.of(context);
   final now = DateTime.now();
-  final minDT = now.add(Duration(minutes: app.prepMinutes)); // alt sınır
 
-  // 24 saat formatını zorla
+  // Saniyeleri/ milisaniyeleri at: dakika hassasiyeti
+  final anchor = DateTime(now.year, now.month, now.day, now.hour, now.minute);
+
+  // Otomatik hazır saat (varsayılan) ve en erken izinli saat
+  final minDT = anchor.add(Duration(minutes: app.prepMinutes));
+  final earliestDT = minDT.subtract(const Duration(minutes: EARLY_TOLERANCE_MIN));
+
+  // Ekranda görünen varsayılan saat: minDT (erken değil)
   TimeOfDay initial = TimeOfDay(hour: minDT.hour, minute: minDT.minute);
 
   while (true) {
     final picked = await showTimePicker(
       context: context,
       initialTime: initial,
-      helpText: 'Heure de retrait (au plus tôt ${_two(minDT.hour)}:${_two(minDT.minute)})',
+      helpText: 'Heure de retrait (au plus tôt ${_two(earliestDT.hour)}:${_two(earliestDT.minute)})',
       builder: (ctx, child) {
         return MediaQuery(
           data: MediaQuery.of(ctx!).copyWith(alwaysUse24HourFormat: true),
@@ -1918,28 +1925,29 @@ Future<DateTime?> _askReadyTime(BuildContext context) async {
       },
     );
 
-    if (picked == null) return null; // vazgeçti
+    if (picked == null) return null; // iptal
 
+    // Gece yarısı olasılığı için karşılaştırmayı minDT’nin tarihi üzerinde yap
     final pickedDT = DateTime(
-      now.year,
-      now.month,
-      now.day,
+      minDT.year,
+      minDT.month,
+      minDT.day,
       picked.hour,
       picked.minute,
     );
 
-    // KURAL: min saatten daha erken OLAMAZ
-    if (pickedDT.isBefore(minDT)) {
-      // kısa uyarı + döngü devam (yeniden seçtireceğiz)
+    // En erken izinli saatten daha erkense reddet
+    if (pickedDT.isBefore(earliestDT)) {
       if (context.mounted) {
         _snack(
           context,
-          'Vous ne pouvez pas choisir avant ${_two(minDT.hour)}:${_two(minDT.minute)}.',
+          'Vous ne pouvez pas choisir avant '
+          '${_two(earliestDT.hour)}:${_two(earliestDT.minute)}.',
           ms: 1800,
         );
       }
-      // Sonraki açılışta da minimumu başlangıç yapalım
-      initial = TimeOfDay(hour: minDT.hour, minute: minDT.minute);
+      // Bir sonraki açılışta, en erken saate getir
+      initial = TimeOfDay(hour: earliestDT.hour, minute: earliestDT.minute);
       continue;
     }
 
