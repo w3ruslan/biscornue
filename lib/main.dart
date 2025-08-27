@@ -1639,7 +1639,7 @@ class CartPage extends StatelessWidget {
               final name = await _askCustomerName(context);
               if (name == null) return;
 
-              // ŞİMDİ SAATİ SOR (alt sınır: şimdi + prepMinutes)
+              // ŞİMDİ SAATİ SOR (alt sınır: şimdi + prepMinutes - tolerans)
               final readyAt = await _askReadyTime(context);
               if (readyAt == null) return;
 
@@ -1916,6 +1916,7 @@ Future<DateTime?> _askReadyTime(BuildContext context) async {
     final picked = await showTimePicker(
       context: context,
       initialTime: initial,
+      initialEntryMode: TimePickerEntryMode.input, // <-- KLAVYE MODU
       helpText: 'Heure de retrait (au plus tôt ${_two(earliestDT.hour)}:${_two(earliestDT.minute)})',
       builder: (ctx, child) {
         return MediaQuery(
