@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
   Sabitler
   ======================= */
 // LÜTFEN BU IP ADRESİNİ KENDİ YAZICINIZIN IP ADRESİYLE DEĞİŞTİRİN
-const String PRINTER_IP = '192.168.1.1'; // <-- Epson yazıcının IP'si
+const String PRINTER_IP = '192.168.1.25'; // <-- Epson yazıcının IP'si
 const int PRINTER_PORT = 9100;           // Genelde 9100 (RAW)
 
 const String _ADMIN_PIN = '6538';
