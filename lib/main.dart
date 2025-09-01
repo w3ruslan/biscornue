@@ -7,7 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
   Sabitler
   ======================= */
 // LÜTFEN BU IP ADRESİNİ KENDİ YAZICINIZIN IP ADRESİYLE DEĞİŞTİRİN
-const String PRINTER_IP = '192.168.1.25'; // <-- Epson yazıcının IP'si
+// Not: Uygulama artık bu değerleri "Créer" sekmesindeki ayarlardan okur.
+// Bunlar sadece varsayılan/fallback değerdir.
+const String PRINTER_IP = '192.168.1.1'; // <-- Epson yazıcının IP'si
 const int PRINTER_PORT = 9100;           // Genelde 9100 (RAW)
 
 const String _ADMIN_PIN = '6538';
@@ -181,6 +183,10 @@ class AppState extends ChangeNotifier {
   final List<SavedOrder> orders = [];
   int prepMinutes = 5;
 
+  // >>> YENİ: Yazıcı ayarları
+  String printerIp = PRINTER_IP;
+  int printerPort = PRINTER_PORT;
+
   Future<void> _saveOrders() async {
     final sp = await SharedPreferences.getInstance();
     final data = orders.map((o) => o.toJson()).toList();
@@ -202,6 +208,11 @@ class AppState extends ChangeNotifier {
   Future<void> loadSettings() async {
     final sp = await SharedPreferences.getInstance();
     prepMinutes = sp.getInt('prepMinutes') ?? 5;
+
+    // >>> YENİ
+    printerIp = sp.getString('printerIp') ?? PRINTER_IP;
+    printerPort = sp.getInt('printerPort') ?? PRINTER_PORT;
+
     await _loadOrders();
     notifyListeners();
   }
@@ -210,6 +221,16 @@ class AppState extends ChangeNotifier {
     prepMinutes = m;
     final sp = await SharedPreferences.getInstance();
     await sp.setInt('prepMinutes', m);
+    notifyListeners();
+  }
+  
+  // >>> YENİ: Yazıcı ayarlarını kaydet
+  Future<void> setPrinter(String ip, int port) async {
+    printerIp = ip.trim();
+    printerPort = port;
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString('printerIp', printerIp);
+    await sp.setInt('printerPort', printerPort);
     notifyListeners();
   }
 
@@ -701,6 +722,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
   int? editingIndex;
   final TextEditingController delayCtrl = TextEditingController();
 
+  // >>> YENİ: IP/Port controller
+  final TextEditingController ipCtrl = TextEditingController();
+  final TextEditingController portCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -709,6 +734,10 @@ class _CreateProductPageState extends State<CreateProductPage> {
       if (editingIndex != null) _loadForEdit(editingIndex!);
       final app = AppScope.of(context);
       delayCtrl.text = app.prepMinutes.toString();
+
+      // >>> YENİ: Yazıcı ayarlarını yükle
+      ipCtrl.text = app.printerIp;
+      portCtrl.text = app.printerPort.toString();
     });
   }
 
@@ -716,6 +745,9 @@ class _CreateProductPageState extends State<CreateProductPage> {
   void dispose() {
     nameCtrl.dispose();
     delayCtrl.dispose();
+    // >>> YENİ
+    ipCtrl.dispose();
+    portCtrl.dispose();
     super.dispose();
   }
 
@@ -785,6 +817,12 @@ class _CreateProductPageState extends State<CreateProductPage> {
       widget.onGoToTab(0);
     }
   }
+  
+  bool _isValidIPv4(String s) {
+    final reg = RegExp(r'^((25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.){3}'
+                       r'(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)$');
+    return reg.hasMatch(s);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -826,6 +864,103 @@ class _CreateProductPageState extends State<CreateProductPage> {
           ),
         ]),
         const SizedBox(height: 12),
+        
+        // ====== YENİ: Imprimante (IP/Port) ayar kartı ======
+        Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: const [
+                  Icon(Icons.print_outlined),
+                  SizedBox(width: 8),
+                  Text('Imprimante', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ]),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: ipCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'IP (ex: 192.168.1.50)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: portCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Port',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 8),
+                Row(children: [
+                  FilledButton.icon(
+                    icon: const Icon(Icons.save_outlined),
+                    label: const Text('Enregistrer'),
+                    onPressed: () async {
+                      final ip = ipCtrl.text.trim();
+                      final port = int.tryParse(portCtrl.text.trim());
+                      if (!_isValidIPv4(ip)) {
+                        _snack(context, 'IP invalide. Ör: 192.168.1.50');
+                        return;
+                      }
+                      if (port == null || port < 1 || port > 65535) {
+                        _snack(context, 'Port invalide (1–65535).');
+                        return;
+                      }
+                      final app = AppScope.of(context);
+                      await app.setPrinter(ip, port);
+                      _snack(context, 'Imprimante enregistrée: $ip:$port');
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.print),
+                    label: const Text('Tester l’imprimante'),
+                    onPressed: () async {
+                      final ip = ipCtrl.text.trim();
+                      final port = int.tryParse(portCtrl.text.trim());
+                      if (!_isValidIPv4(ip) || port == null) {
+                        _snack(context, 'IP/Port geçersiz.');
+                        return;
+                      }
+                      try {
+                        await printTestToPrinter(ip, port);
+                        _snack(context, 'Test envoyé à l’imprimante.');
+                      } catch (e) {
+                        _snack(context, 'Test başarısız: $e');
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    icon: const Icon(Icons.restore),
+                    label: const Text('Réinitialiser'),
+                    onPressed: () async {
+                      ipCtrl.text = PRINTER_IP;
+                      portCtrl.text = PRINTER_PORT.toString();
+                      final app = AppScope.of(context);
+                      await app.setPrinter(PRINTER_IP, PRINTER_PORT);
+                      _snack(context, 'Par défaut: $PRINTER_IP:$PRINTER_PORT');
+                    },
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ),
+
         Card(
           margin: const EdgeInsets.only(bottom: 12),
           child: Padding(
@@ -1733,7 +1868,8 @@ class CartPage extends StatelessWidget {
               if (order == null) return;
 
               try {
-                await printOrderAndroid(order);
+                // >>> GÜNCELLEME: AppState’teki IP/Port ile yazdır
+                await printOrderAndroidWith(order, app.printerIp, app.printerPort);
                 if (context.mounted) {
                   _snack(context, 'Commande validée et envoyée à l’imprimante.');
                 }
@@ -1819,7 +1955,8 @@ class OrdersPage extends StatelessWidget {
                   icon: const Icon(Icons.print_outlined),
                   onPressed: () async {
                     try {
-                      await printOrderAndroid(o);
+                      final app = AppScope.of(context);
+                      await printOrderAndroidWith(o, app.printerIp, app.printerPort);
                       _snack(context, 'Envoyé à l’imprimante.');
                     } catch (e) {
                       _snack(context, 'Échec de l’impression: $e');
@@ -1879,7 +2016,8 @@ class OrdersPage extends StatelessWidget {
                           TextButton(
                             onPressed: () async {
                               try {
-                                await printOrderAndroid(o);
+                                final app = AppScope.of(context);
+                                await printOrderAndroidWith(o, app.printerIp, app.printerPort);
                                 if (context.mounted) {
                                   Navigator.pop(context);
                                   _snack(context, 'Envoyé à l’imprimante.');
@@ -2158,8 +2296,8 @@ void _writeCp1252(Socket socket, String text) {
   socket.add(out);
 }
 
-Future<void> printOrderAndroid(SavedOrder o) async {
-  final socket = await Socket.connect(PRINTER_IP, PRINTER_PORT, timeout: const Duration(seconds: 5));
+Future<void> printOrderAndroidWith(SavedOrder o, String ip, int port) async {
+  final socket = await Socket.connect(ip, port, timeout: const Duration(seconds: 5));
 
   _cmd(socket, [27, 64]); // init
   _cmd(socket, [27, 116, 16]); // CP1252
@@ -2190,17 +2328,12 @@ Future<void> printOrderAndroid(SavedOrder o) async {
 
   for (int i = 0; i < o.lines.length; i++) {
     final l = o.lines[i];
-
-    // Ürün adını büyük/kalın bas
     _strongLine(socket, _rightLine(l.product.name, _money(l.total)));
 
     for (final g in l.product.groups) {
       final sel = l.picked[g.id] ?? const <OptionItem>[];
       if (sel.isNotEmpty) {
-        // Grup başlığını ince yaz
         _writeCp1252(socket, '  ${g.title}:\n');
-
-        // Seçimleri büyük/kalın bas
         for (final it in sel) {
           _strongLine(socket, '    * ${it.label}');
         }
@@ -2219,9 +2352,38 @@ Future<void> printOrderAndroid(SavedOrder o) async {
   _size(socket, 0);
   _boldOff(socket);
 
-  // feed & cut
-  _cmd(socket, [10, 10, 29, 86, 66, 0]);
+  _cmd(socket, [10, 10, 29, 86, 66, 0]); // feed & cut
+  await socket.flush();
+  await socket.close();
+}
 
+@Deprecated('AppState’ten IP/Port kullanın')
+Future<void> printOrderAndroid(SavedOrder o) async {
+  // Varsayılan sabitleri kullanır (uygun değil ama geriye dönük rahatlık için)
+  await printOrderAndroidWith(o, PRINTER_IP, PRINTER_PORT);
+}
+
+Future<void> printTestToPrinter(String ip, int port) async {
+  final socket = await Socket.connect(ip, port, timeout: const Duration(seconds: 5));
+  _cmd(socket, [27, 64]);      // init
+  _cmd(socket, [27, 116, 16]); // CP1252
+
+  _alignCenter(socket);
+  _boldOn(socket);
+  _size(socket, 1);
+  _writeCp1252(socket, '*** TEST IMPRESSION ***\n');
+  _boldOff(socket);
+  _size(socket, 0);
+
+  final now = DateTime.now();
+  _writeCp1252(socket, 'BISCORNUE\n');
+  _writeCp1252(socket, 'IP: $ip  Port: $port\n');
+  _writeCp1252(socket, '${_two(now.day)}/${_two(now.month)}/${now.year} '
+                       '${_two(now.hour)}:${_two(now.minute)}\n');
+  _writeCp1252(socket, '--------------------------------\n');
+  _writeCp1252(socket, 'Si ceci est lisible, la connexion est OK.\n');
+
+  _cmd(socket, [10, 10, 29, 86, 66, 0]); // feed & cut
   await socket.flush();
   await socket.close();
 }
