@@ -1137,6 +1137,30 @@ class _OrderWizardState extends State<OrderWizard> {
     }
   }
 
+  // -- TOTORO tespiti
+  bool _isTotoroSelected() {
+    final l = picked['type_burger'];
+    final id = (l == null || l.isEmpty) ? '' : l.first.id;
+    return id == 'totoro';
+  }
+
+  // -- TOTORO için tek seçenekli sos grubu (tek kart)
+  static const String _totoroSpecialId = 'sauce_speciale_t';
+  static const String _totoroLabel = '⚠️ Note importante : la sauce spéciale ne peut pas être modifiée.';
+
+  OptionGroup _totoroFixedSauceGroup() {
+    return OptionGroup(
+      id: 'sauce_burger',
+      title: 'Sauces',
+      multiple: false, // tek seçim
+      minSelect: 1,
+      maxSelect: 1,
+      items: [
+        OptionItem(id: _totoroSpecialId, label: _totoroLabel, price: 0.0),
+      ],
+    );
+  }
+
   List<OptionGroup> _groupsForVisibility(List<OptionGroup> base) {
     if (widget.product.name == 'Menu Enfant') {
       final cheese = (picked['choix_enfant'] ?? const <OptionItem>[]).any((it) => it.id == 'cheese_menu');
@@ -1157,6 +1181,13 @@ class _OrderWizardState extends State<OrderWizard> {
         if (g.id == 'viande3') return t == 't3';
         return true;
       }).toList();
+    }
+
+    // Burgers – TOTORO seçildiyse sos grubu tek karta düşsün
+    if (widget.product.name == 'Burgers') {
+      if (_isTotoroSelected()) {
+        return base.map((g) => g.id == 'sauce_burger' ? _totoroFixedSauceGroup() : g).toList();
+      }
     }
 
     return base;
@@ -1255,6 +1286,11 @@ class _OrderWizardState extends State<OrderWizard> {
   }
 
   bool _validGroup(OptionGroup g) {
+    // TOTORO: "Sauces" adımında tek kart ve o kart seçilmiş olmalı
+    if (widget.product.name == 'Burgers' && g.id == 'sauce_burger' && _isTotoroSelected()) {
+      final sel = picked[g.id] ?? const <OptionItem>[];
+      return sel.length == 1 && sel.first.id == _totoroSpecialId;
+    }
     final n = (picked[g.id] ?? const []).length;
     return n >= g.minSelect && n <= g.maxSelect;
   }
