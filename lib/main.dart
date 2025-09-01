@@ -1161,6 +1161,16 @@ class _OrderWizardState extends State<OrderWizard> {
     );
   }
 
+  // -- Tacos için patates fiyatını belirle
+  double _sansFritesDedansPrice() {
+    final l = picked['type_tacos'];
+    final id = (l == null || l.isEmpty) ? '' : l.first.id;
+    if (id == 't1') return 2.0;
+    if (id == 't2') return 4.0;
+    if (id == 't3') return 6.0;
+    return 2.0; // emniyet
+  }
+
   List<OptionGroup> _groupsForVisibility(List<OptionGroup> base) {
     if (widget.product.name == 'Menu Enfant') {
       final cheese = (picked['choix_enfant'] ?? const <OptionItem>[]).any((it) => it.id == 'cheese_menu');
@@ -1176,11 +1186,50 @@ class _OrderWizardState extends State<OrderWizard> {
         return (l == null || l.isEmpty) ? '' : l.first.id;
       }
       final t = sel('type_tacos');
-      return base.where((g) {
+
+      // Grupları filtrele (mevcut kural)
+      final filtered = base.where((g) {
         if (g.id == 'viande2') return t == 't2' || t == 't3';
         if (g.id == 'viande3') return t == 't3';
         return true;
       }).toList();
+
+      // "Supplements" grubuna "Sans frites dans tacos" dinamik fiyatla ekle
+      for (int i = 0; i < filtered.length; i++) {
+        final g = filtered[i];
+        if (g.id == 'supp_tacos') {
+          final price = _sansFritesDedansPrice();
+
+          // Orijinal item'ları kopyala + yeni opsiyonu ekle
+          final items = [
+            ...g.items.map((e) => OptionItem(id: e.id, label: e.label, price: e.price)),
+            OptionItem(id: 'sans_frites_dedans', label: 'Sans frites dans tacos', price: price),
+          ];
+
+          filtered[i] = OptionGroup(
+            id: g.id,
+            title: g.title,
+            multiple: g.multiple,
+            minSelect: g.minSelect,
+            maxSelect: g.maxSelect,
+            items: items,
+          );
+
+          // Eğer kullanıcı bu seçeneği seçmişse ve boyutu sonradan değiştirdiyse,
+          // sepet içindeki fiyatını yeni boyut fiyatına senkronla.
+          final selList = picked['supp_tacos'];
+          if (selList != null) {
+            for (final it in selList) {
+              if (it.id == 'sans_frites_dedans' && it.price != price) {
+                it.price = price;
+              }
+            }
+          }
+          break;
+        }
+      }
+
+      return filtered;
     }
 
     // Burgers – TOTORO seçildiyse sos grubu tek karta düşsün
