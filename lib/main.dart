@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 /* =======================
   Sabitler
   ======================= */
@@ -11,10 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 // Bunlar sadece varsayılan/fallback değerdir.
 const String PRINTER_IP = '192.168.1.1'; // <-- Epson yazıcının IP'si
 const int PRINTER_PORT = 9100;           // Genelde 9100 (RAW)
-
 const String _ADMIN_PIN = '6538';
 const int EARLY_TOLERANCE_MIN = 5; // 5 dakika erken alma toleransı
-
 /* =======================
   ENTRY
   ======================= */
@@ -24,7 +21,6 @@ void main() async {
   await appState.loadSettings();
   runApp(AppScope(notifier: appState, child: const App()));
 }
-
 class App extends StatelessWidget {
   const App({super.key});
   @override
@@ -43,7 +39,6 @@ class App extends StatelessWidget {
     );
   }
 }
-
 /* =======================
   MODELLER & STATE
   ======================= */
@@ -51,7 +46,6 @@ class Product {
   String name;
   final List<OptionGroup> groups;
   Product({required this.name, List<OptionGroup>? groups}) : groups = groups ?? [];
-
   double priceForSelection(Map<String, List<OptionItem>> picked) {
     double total = 0;
     for (final g in groups) {
@@ -60,7 +54,6 @@ class Product {
     }
     return total;
   }
-
   Map<String, dynamic> toJson() => {
         'name': name,
         'groups': groups.map((g) => g.toJson()).toList(),
@@ -72,7 +65,6 @@ class Product {
             .toList(),
       );
 }
-
 class OptionGroup {
   final String id;
   String title;
@@ -88,7 +80,6 @@ class OptionGroup {
     required this.maxSelect,
     List<OptionItem>? items,
   }) : items = items ?? [];
-
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': title,
@@ -108,29 +99,28 @@ class OptionGroup {
             .toList(),
       );
 }
-
 class OptionItem {
   final String id;
   String label;
   double price;
   OptionItem({required this.id, required this.label, required this.price});
-
   Map<String, dynamic> toJson() => {'id': id, 'label': label, 'price': price};
   factory OptionItem.fromJson(Map<String, dynamic> j) =>
       OptionItem(id: j['id'], label: j['label'], price: (j['price'] as num).toDouble());
 }
-
 class CartLine {
   final Product product;
   final Map<String, List<OptionItem>> picked;
-  CartLine({required this.product, required this.picked});
-  double get total => product.priceForSelection(picked);
-
+  int qty;
+  CartLine({required this.product, required this.picked, this.qty = 1});
+  double get unitTotal => product.priceForSelection(picked);
+  double get total => unitTotal * qty;
   Map<String, dynamic> toJson() => {
         'product': product.toJson(),
         'picked': {
           for (final e in picked.entries) e.key: e.value.map((it) => it.toJson()).toList()
         },
+        'qty': qty,
       };
   factory CartLine.fromJson(Map<String, dynamic> j) => CartLine(
         product: Product.fromJson(Map<String, dynamic>.from(j['product'])),
@@ -140,16 +130,15 @@ class CartLine {
                 .map((x) => OptionItem.fromJson(Map<String, dynamic>.from(x)))
                 .toList()
         },
+        qty: (j['qty'] as int?) ?? 1,
       );
 }
-
 class SavedOrder {
   final String id;
   final DateTime createdAt;
   final DateTime readyAt;
   final List<CartLine> lines;
   final String customer;
-
   SavedOrder({
     required this.id,
     required this.createdAt,
@@ -158,7 +147,6 @@ class SavedOrder {
     required this.customer,
   });
   double get total => lines.fold(0.0, (s, l) => s + l.total);
-
   Map<String, dynamic> toJson() => {
         'id': id,
         'createdAt': createdAt.toIso8601String(),
@@ -176,23 +164,39 @@ class SavedOrder {
             .toList(),
       );
 }
-
 class AppState extends ChangeNotifier {
   final List<Product> products = [];
   final List<CartLine> cart = [];
   final List<SavedOrder> orders = [];
   int prepMinutes = 5;
-
   // >>> YENİ: Yazıcı ayarları
   String printerIp = PRINTER_IP;
   int printerPort = PRINTER_PORT;
+
+  // --- AppState içine EKLE ---
+  Future<void> _saveProducts() async {
+    final sp = await SharedPreferences.getInstance();
+    final data = products.map((p) => p.toJson()).toList();
+    await sp.setString('products_json', jsonEncode(data));
+  }
+
+  Future<void> _loadProducts() async {
+    final sp = await SharedPreferences.getInstance();
+    final raw = sp.getString('products_json');
+    if (raw != null && raw.isNotEmpty) {
+      final list = jsonDecode(raw) as List;
+      products
+        ..clear()
+        ..addAll(list.map((e) => Product.fromJson(Map<String, dynamic>.from(e))));
+      notifyListeners();
+    }
+  }
 
   Future<void> _saveOrders() async {
     final sp = await SharedPreferences.getInstance();
     final data = orders.map((o) => o.toJson()).toList();
     await sp.setString('orders_json', jsonEncode(data));
   }
-
   Future<void> _loadOrders() async {
     final sp = await SharedPreferences.getInstance();
     final raw = sp.getString('orders_json');
@@ -204,26 +208,22 @@ class AppState extends ChangeNotifier {
       notifyListeners();
     }
   }
-
   Future<void> loadSettings() async {
     final sp = await SharedPreferences.getInstance();
     prepMinutes = sp.getInt('prepMinutes') ?? 5;
-
-    // >>> YENİ
     printerIp = sp.getString('printerIp') ?? PRINTER_IP;
     printerPort = sp.getInt('printerPort') ?? PRINTER_PORT;
-
+    await _loadProducts(); // <-- MENÜYÜ DİSKTEN YÜKLE
     await _loadOrders();
     notifyListeners();
   }
-
   Future<void> setPrepMinutes(int m) async {
     prepMinutes = m;
     final sp = await SharedPreferences.getInstance();
     await sp.setInt('prepMinutes', m);
     notifyListeners();
   }
-  
+ 
   // >>> YENİ: Yazıcı ayarlarını kaydet
   Future<void> setPrinter(String ip, int port) async {
     printerIp = ip.trim();
@@ -233,59 +233,61 @@ class AppState extends ChangeNotifier {
     await sp.setInt('printerPort', printerPort);
     notifyListeners();
   }
-
   void addProduct(Product p) {
     products.add(p);
+    _saveProducts();
     notifyListeners();
   }
-
   void replaceProductAt(int i, Product p) {
     products[i] = p;
+    _saveProducts();
     notifyListeners();
   }
-
-  void addLineToCart(Product p, Map<String, List<OptionItem>> picked) {
+  void addLineToCart(Product p, Map<String, List<OptionItem>> picked, {int qty = 1}) {
     final deep = {for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)};
-    cart.add(CartLine(product: p, picked: deep));
+    cart.add(CartLine(product: p, picked: deep, qty: qty));
     notifyListeners();
   }
-
+  void updateCartLineQty(int i, int newQty) {
+    if (i < 0 || i >= cart.length) return;
+    if (newQty < 1) newQty = 1;
+    final l = cart[i];
+    cart[i] = CartLine(product: l.product, picked: l.picked, qty: newQty);
+    notifyListeners();
+  }
   void removeCartLineAt(int i) {
     if (i >= 0 && i < cart.length) {
       cart.removeAt(i);
       notifyListeners();
     }
   }
-
   void clearCart() {
     cart.clear();
     notifyListeners();
   }
-
   void updateCartLineAt(int i, Map<String, List<OptionItem>> picked) {
     if (i < 0 || i >= cart.length) return;
     final deep = {for (final e in picked.entries) e.key: List<OptionItem>.from(e.value)};
     final p = cart[i].product;
-    cart[i] = CartLine(product: p, picked: deep);
+    // Adedi koru
+    final currentQty = cart[i].qty;
+    cart[i] = CartLine(product: p, picked: deep, qty: currentQty);
     notifyListeners();
   }
-
   SavedOrder? finalizeCartToOrder({
     required String customer,
     DateTime? readyAtOverride,
   }) {
     if (cart.isEmpty) return null;
-
     final deepLines = cart
         .map((l) => CartLine(
               product: l.product,
               picked: {for (final e in l.picked.entries) e.key: List<OptionItem>.from(e.value)},
+              qty: l.qty,
             ))
         .toList();
-
     final now = DateTime.now();
     final ready = readyAtOverride ?? now.add(Duration(minutes: prepMinutes));
-
     final order = SavedOrder(
       id: now.millisecondsSinceEpoch.toString(),
       createdAt: now,
@@ -293,21 +295,18 @@ class AppState extends ChangeNotifier {
       lines: deepLines,
       customer: customer,
     );
-
     orders.add(order);
     cart.clear();
     _saveOrders();
     notifyListeners();
     return order;
   }
-
   void clearOrders() {
     orders.clear();
     _saveOrders();
     notifyListeners();
   }
 }
-
 /* Ortak listeler (menü data helpers) */
 List<OptionItem> _meats(double base) => [
       OptionItem(id: 'kebab', label: 'Kebab', price: base),
@@ -317,7 +316,6 @@ List<OptionItem> _meats(double base) => [
       OptionItem(id: 'cordon', label: 'Cordon bleu', price: base),
       OptionItem(id: 'nuggets', label: 'Nuggets', price: base),
     ];
-
 List<OptionItem> _supps() => [
       OptionItem(id: 'cheddar', label: 'Cheddar', price: 1.50),
       OptionItem(id: 'mozza', label: 'Mozzarella rapee', price: 1.50),
@@ -330,7 +328,6 @@ List<OptionItem> _supps() => [
       OptionItem(id: 'd_mozza', label: 'Double Mozzarella rapee', price: 3.00),
       OptionItem(id: 'd_porc', label: 'Double Poitrine de porc fume', price: 3.00),
     ];
-
 List<OptionItem> _sauces() => [
       OptionItem(id: 'sans_sauce', label: 'Sans sauce', price: 0.00),
       OptionItem(id: 'blanche', label: 'Blanche', price: 0.00),
@@ -341,21 +338,18 @@ List<OptionItem> _sauces() => [
       OptionItem(id: 'bigburger', label: 'Big Burger', price: 0.00),
       OptionItem(id: 'harissa', label: 'Harissa', price: 0.00),
     ];
-
 List<OptionItem> _tacosSauces() => [
       ..._sauces(),
       OptionItem(id: 'fromagere', label: 'Sauce fromagere', price: 0.00),
       OptionItem(id: 'seulement_fromagere', label: 'Seulement sauce fromagere', price: 0.00),
       OptionItem(id: 'sans_fromagere', label: 'Sans sauce fromagere', price: 0.00),
     ];
-
 List<OptionItem> _formules() => [
       OptionItem(id: 'seul', label: 'Seul', price: 0.00),
       OptionItem(id: 'frites', label: 'Avec frites', price: 1.00),
       OptionItem(id: 'boisson', label: 'Avec boisson', price: 1.00),
       OptionItem(id: 'menu', label: 'Avec frites et boisson', price: 2.00),
     ];
-
 /* InheritedNotifier: global state erişimi */
 class AppScope extends InheritedNotifier<AppState> {
   const AppScope({required AppState notifier, required Widget child, Key? key})
@@ -366,7 +360,6 @@ class AppScope extends InheritedNotifier<AppState> {
     return scope!.notifier!;
   }
 }
-
 /* =======================
   HOME (4 sekme)
   ======================= */
@@ -375,17 +368,14 @@ class Home extends StatefulWidget {
   @override
   State<Home> createState() => _HomeState();
 }
-
 class _HomeState extends State<Home> {
   bool _seeded = false;
   int index = 0;
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_seeded) return;
     _seeded = true;
-
     final app = AppScope.of(context);
     if (app.products.isEmpty) {
       final products = <Product>[
@@ -545,24 +535,20 @@ class _HomeState extends State<Home> {
           OptionGroup(id: 'sauce_pf', title: 'Sauces', multiple: true, minSelect: 1, maxSelect: 2, items: _sauces()),
         ]),
       ];
-
       app.products.addAll(products);
     }
   }
-
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final totalCart = app.cart.fold(0.0, (s, l) => s + l.total);
     final cartBadge = app.cart.length;
-
     final pages = [
       const ProductsPage(), // 0: Produits
       const CartPage(), // 1: Panier
       const OrdersPage(), // 2: Commandes
       CreateProductPage(onGoToTab: (i) => setState(() => index = i)), // 3: Créer
     ];
-
     return Scaffold(
       appBar: AppBar(title: const Text('BISCORNUE')),
       body: pages[index],
@@ -606,18 +592,15 @@ class _HomeState extends State<Home> {
     );
   }
 }
-
 /* =======================
   PAGE 1 : PRODUITS
   ======================= */
 class ProductsPage extends StatelessWidget {
   const ProductsPage({super.key});
-
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final products = app.products;
-
     if (products.isEmpty) {
       return Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: const [
@@ -627,14 +610,11 @@ class ProductsPage extends StatelessWidget {
         ]),
       );
     }
-
     final width = MediaQuery.of(context).size.width;
     int cross = 2;
     if (width > 600) cross = 3;
     if (width > 900) cross = 4;
-
     final aspect = width > 900 ? 1.40 : (width > 600 ? 1.30 : 1.10);
-
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -648,15 +628,12 @@ class ProductsPage extends StatelessWidget {
     );
   }
 }
-
 class _ProductCard extends StatelessWidget {
   final Product product;
   const _ProductCard({super.key, required this.product});
-
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme;
-
     Future<void> openWizard() async {
       final added = await Navigator.push<bool>(
         context,
@@ -666,7 +643,6 @@ class _ProductCard extends StatelessWidget {
         _snack(context, 'Ajouté au panier.');
       }
     }
-
     return InkWell(
       borderRadius: BorderRadius.circular(24),
       onTap: openWizard,
@@ -704,7 +680,6 @@ class _ProductCard extends StatelessWidget {
     );
   }
 }
-
 /* =======================
   PAGE 2 : CRÉER + DÜZENLE (kısa versiyon)
   ======================= */
@@ -715,17 +690,14 @@ class CreateProductPage extends StatefulWidget {
   @override
   State<CreateProductPage> createState() => _CreateProductPageState();
 }
-
 class _CreateProductPageState extends State<CreateProductPage> {
   final TextEditingController nameCtrl = TextEditingController(text: 'Sandwich');
   final List<OptionGroup> editingGroups = [];
   int? editingIndex;
   final TextEditingController delayCtrl = TextEditingController();
-
   // >>> YENİ: IP/Port controller
   final TextEditingController ipCtrl = TextEditingController();
   final TextEditingController portCtrl = TextEditingController();
-
   @override
   void initState() {
     super.initState();
@@ -734,13 +706,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
       if (editingIndex != null) _loadForEdit(editingIndex!);
       final app = AppScope.of(context);
       delayCtrl.text = app.prepMinutes.toString();
-
       // >>> YENİ: Yazıcı ayarlarını yükle
       ipCtrl.text = app.printerIp;
       portCtrl.text = app.printerPort.toString();
     });
   }
-
   @override
   void dispose() {
     nameCtrl.dispose();
@@ -750,7 +720,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
     portCtrl.dispose();
     super.dispose();
   }
-
   void _loadForEdit(int idx) {
     final app = AppScope.of(context);
     if (idx < 0 || idx >= app.products.length) return;
@@ -759,7 +728,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
     editingGroups..clear()..addAll(p.groups.map(_copyGroup));
     setState(() => editingIndex = idx);
   }
-
   OptionGroup _copyGroup(OptionGroup g) => OptionGroup(
         id: g.id,
         title: g.title,
@@ -768,13 +736,11 @@ class _CreateProductPageState extends State<CreateProductPage> {
         maxSelect: g.maxSelect,
         items: g.items.map((e) => OptionItem(id: e.id, label: e.label, price: e.price)).toList(),
       );
-
   void addGroup() {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     editingGroups.add(OptionGroup(id: id, title: 'Nouveau groupe', multiple: false, minSelect: 1, maxSelect: 1));
     setState(() {});
   }
-
   void saveProduct() {
     final app = AppScope.of(context);
     if (nameCtrl.text.trim().isEmpty) {
@@ -810,20 +776,18 @@ class _CreateProductPageState extends State<CreateProductPage> {
     nameCtrl.text = '';
     editingGroups.clear();
     setState(() => editingIndex = null);
-
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     } else {
       widget.onGoToTab(0);
     }
   }
-  
+ 
   bool _isValidIPv4(String s) {
     final reg = RegExp(r'^((25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.){3}'
-                       r'(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)$');
+            r'(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)$');
     return reg.hasMatch(s);
   }
-
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
@@ -864,7 +828,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
           ),
         ]),
         const SizedBox(height: 12),
-        
+       
         // ====== YENİ: Imprimante (IP/Port) ayar kartı ======
         Card(
           margin: const EdgeInsets.only(bottom: 12),
@@ -912,7 +876,7 @@ class _CreateProductPageState extends State<CreateProductPage> {
                       final ip = ipCtrl.text.trim();
                       final port = int.tryParse(portCtrl.text.trim());
                       if (!_isValidIPv4(ip)) {
-                        _snack(context, 'IP invalide. Ör: 192.168.1.50');
+                        _snack(context, 'IP invalide. ex : 192.168.1.50');
                         return;
                       }
                       if (port == null || port < 1 || port > 65535) {
@@ -932,14 +896,14 @@ class _CreateProductPageState extends State<CreateProductPage> {
                       final ip = ipCtrl.text.trim();
                       final port = int.tryParse(portCtrl.text.trim());
                       if (!_isValidIPv4(ip) || port == null) {
-                        _snack(context, 'IP/Port geçersiz.');
+                        _snack(context, 'IP/Port invalide.');
                         return;
                       }
                       try {
                         await printTestToPrinter(ip, port);
                         _snack(context, 'Test envoyé à l’imprimante.');
                       } catch (e) {
-                        _snack(context, 'Test başarısız: $e');
+                        _snack(context, 'Échec du test : $e');
                       }
                     },
                   ),
@@ -960,7 +924,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
             ),
           ),
         ),
-
         Card(
           margin: const EdgeInsets.only(bottom: 12),
           child: Padding(
@@ -1049,7 +1012,6 @@ class _CreateProductPageState extends State<CreateProductPage> {
     );
   }
 }
-
 class _GroupEditor extends StatefulWidget {
   final OptionGroup group;
   final VoidCallback onDelete;
@@ -1058,12 +1020,10 @@ class _GroupEditor extends StatefulWidget {
   @override
   State<_GroupEditor> createState() => _GroupEditorState();
 }
-
 class _GroupEditorState extends State<_GroupEditor> {
   final TextEditingController titleCtrl = TextEditingController();
   final TextEditingController minCtrl = TextEditingController();
   final TextEditingController maxCtrl = TextEditingController();
-
   @override
   void initState() {
     super.initState();
@@ -1071,7 +1031,6 @@ class _GroupEditorState extends State<_GroupEditor> {
     minCtrl.text = widget.group.minSelect.toString();
     maxCtrl.text = widget.group.maxSelect.toString();
   }
-
   @override
   void dispose() {
     titleCtrl.dispose();
@@ -1079,7 +1038,6 @@ class _GroupEditorState extends State<_GroupEditor> {
     maxCtrl.dispose();
     super.dispose();
   }
-
   void apply() {
     widget.group.title = titleCtrl.text.trim();
     widget.group.multiple = _mode == 1;
@@ -1087,7 +1045,6 @@ class _GroupEditorState extends State<_GroupEditor> {
     widget.group.maxSelect = int.tryParse(maxCtrl.text) ?? 1;
     widget.onChanged();
   }
-
   int get _mode => widget.group.multiple ? 1 : 0;
   set _mode(int v) {
     widget.group.multiple = (v == 1);
@@ -1098,14 +1055,12 @@ class _GroupEditorState extends State<_GroupEditor> {
     apply();
     setState(() {});
   }
-
   void addOption() {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     widget.group.items.add(OptionItem(id: id, label: 'Nouvelle option', price: 0));
     widget.onChanged();
     setState(() {});
   }
-
   @override
   Widget build(BuildContext context) {
     final g = widget.group;
@@ -1178,7 +1133,6 @@ class _GroupEditorState extends State<_GroupEditor> {
     );
   }
 }
-
 class _OptionEditor extends StatefulWidget {
   final OptionItem item;
   final VoidCallback onDelete;
@@ -1187,7 +1141,6 @@ class _OptionEditor extends StatefulWidget {
   @override
   State<_OptionEditor> createState() => _OptionEditorState();
 }
-
 class _OptionEditorState extends State<_OptionEditor> {
   final TextEditingController labelCtrl = TextEditingController();
   final TextEditingController priceCtrl = TextEditingController();
@@ -1197,20 +1150,17 @@ class _OptionEditorState extends State<_OptionEditor> {
     labelCtrl.text = widget.item.label;
     priceCtrl.text = widget.item.price.toStringAsFixed(2);
   }
-
   @override
   void dispose() {
     labelCtrl.dispose();
     priceCtrl.dispose();
     super.dispose();
   }
-
   void apply() {
     widget.item.label = labelCtrl.text.trim();
     widget.item.price = double.tryParse(priceCtrl.text.replaceAll(',', '.')) ?? 0.0;
     widget.onChanged();
   }
-
   @override
   Widget build(BuildContext context) {
     return ListTile(
@@ -1238,7 +1188,6 @@ class _OptionEditorState extends State<_OptionEditor> {
     );
   }
 }
-
 /* =======================
   WIZARD
   ======================= */
@@ -1246,22 +1195,18 @@ class OrderWizard extends StatefulWidget {
   final Product product;
   final Map<String, List<OptionItem>>? initialPicked;
   final bool editMode;
-
   const OrderWizard({
     super.key,
     required this.product,
     this.initialPicked,
     this.editMode = false,
   });
-
   @override
   State<OrderWizard> createState() => _OrderWizardState();
 }
-
 class _OrderWizardState extends State<OrderWizard> {
   int step = 0;
   final Map<String, List<OptionItem>> picked = {};
-
   @override
   void initState() {
     super.initState();
@@ -1271,18 +1216,15 @@ class _OrderWizardState extends State<OrderWizard> {
       }
     }
   }
-
   // -- TOTORO tespiti
   bool _isTotoroSelected() {
     final l = picked['type_burger'];
     final id = (l == null || l.isEmpty) ? '' : l.first.id;
     return id == 'totoro';
   }
-
   // -- TOTORO için tek seçenekli sos grubu (tek kart)
   static const String _totoroSpecialId = 'sauce_speciale_t';
   static const String _totoroLabel = '⚠️ Note importante : la sauce spéciale ne peut pas être modifiée.';
-
   OptionGroup _totoroFixedSauceGroup() {
     return OptionGroup(
       id: 'sauce_burger',
@@ -1295,7 +1237,6 @@ class _OrderWizardState extends State<OrderWizard> {
       ],
     );
   }
-
   // -- Tacos için patates fiyatını belirle
   double _sansFritesDedansPrice() {
     final l = picked['type_tacos'];
@@ -1305,7 +1246,6 @@ class _OrderWizardState extends State<OrderWizard> {
     if (id == 't3') return 6.0;
     return 2.0; // emniyet
   }
-
   List<OptionGroup> _groupsForVisibility(List<OptionGroup> base) {
     if (widget.product.name == 'Menu Enfant') {
       final cheese = (picked['choix_enfant'] ?? const <OptionItem>[]).any((it) => it.id == 'cheese_menu');
@@ -1314,33 +1254,28 @@ class _OrderWizardState extends State<OrderWizard> {
         return true;
       }).toList();
     }
-
     if (widget.product.name == 'Tacos') {
       String sel(String gid) {
         final l = picked[gid];
         return (l == null || l.isEmpty) ? '' : l.first.id;
       }
       final t = sel('type_tacos');
-
       // Grupları filtrele (mevcut kural)
       final filtered = base.where((g) {
         if (g.id == 'viande2') return t == 't2' || t == 't3';
         if (g.id == 'viande3') return t == 't3';
         return true;
       }).toList();
-
       // "Supplements" grubuna "Sans frites dans tacos" dinamik fiyatla ekle
       for (int i = 0; i < filtered.length; i++) {
         final g = filtered[i];
         if (g.id == 'supp_tacos') {
           final price = _sansFritesDedansPrice();
-
           // Orijinal item'ları kopyala + yeni opsiyonu ekle
           final items = [
             ...g.items.map((e) => OptionItem(id: e.id, label: e.label, price: e.price)),
             OptionItem(id: 'sans_frites_dedans', label: 'Sans frites dans tacos', price: price),
           ];
-
           filtered[i] = OptionGroup(
             id: g.id,
             title: g.title,
@@ -1349,7 +1284,6 @@ class _OrderWizardState extends State<OrderWizard> {
             maxSelect: g.maxSelect,
             items: items,
           );
-
           // Eğer kullanıcı bu seçeneği seçmişse ve boyutu sonradan değiştirdiyse,
           // sepet içindeki fiyatını yeni boyut fiyatına senkronla.
           final selList = picked['supp_tacos'];
@@ -1363,34 +1297,27 @@ class _OrderWizardState extends State<OrderWizard> {
           break;
         }
       }
-
       return filtered;
     }
-
     // Burgers – TOTORO seçildiyse sos grubu tek karta düşsün
     if (widget.product.name == 'Burgers') {
       if (_isTotoroSelected()) {
         return base.map((g) => g.id == 'sauce_burger' ? _totoroFixedSauceGroup() : g).toList();
       }
     }
-
     return base;
   }
-
   void _toggleSingle(OptionGroup g, OptionItem it) {
     picked[g.id] = [it];
     setState(() {});
   }
-
   void _toggleMulti(OptionGroup g, OptionItem it) {
     final list = List<OptionItem>.from(picked[g.id] ?? []);
     bool isCrud = g.id == 'crudites' || g.id == 'crudites_enfant';
     bool isSauceGroup =
         g.id == 'sauces' || g.id == 'sauce_burger' || g.id == 'sauce_pf' || g.id == 'sauce_enfant';
     bool isTacosSauce = g.id == 'sauce_tacos';
-
     bool exists = list.any((e) => e.id == it.id);
-
     bool isSansCrud = it.id == 'sans_crudites';
     bool isAvecCrud = it.id == 'avec_crudites' || it.id == 'avec';
     if (isCrud && (isSansCrud || isAvecCrud)) {
@@ -1406,7 +1333,6 @@ class _OrderWizardState extends State<OrderWizard> {
     if (isCrud) {
       list.removeWhere((e) => e.id == 'sans_crudites' || e.id == 'avec_crudites' || e.id == 'avec');
     }
-
     if (isSauceGroup) {
       if (it.id == 'sans_sauce') {
         if (exists) {
@@ -1420,7 +1346,6 @@ class _OrderWizardState extends State<OrderWizard> {
         list.removeWhere((e) => e.id == 'sans_sauce');
       }
     }
-
     if (isTacosSauce) {
       if (it.id == 'sans_sauce' || it.id == 'seulement_fromagere') {
         if (exists) {
@@ -1455,7 +1380,6 @@ class _OrderWizardState extends State<OrderWizard> {
       }
       list.removeWhere((e) => e.id == 'sans_sauce' || e.id == 'seulement_fromagere');
     }
-
     if (exists) {
       list.removeWhere((e) => e.id == it.id);
     } else {
@@ -1468,7 +1392,6 @@ class _OrderWizardState extends State<OrderWizard> {
     picked[g.id] = list;
     setState(() {});
   }
-
   bool _validGroup(OptionGroup g) {
     // TOTORO: "Sauces" adımında tek kart ve o kart seçilmiş olmalı
     if (widget.product.name == 'Burgers' && g.id == 'sauce_burger' && _isTotoroSelected()) {
@@ -1478,13 +1401,11 @@ class _OrderWizardState extends State<OrderWizard> {
     final n = (picked[g.id] ?? const []).length;
     return n >= g.minSelect && n <= g.maxSelect;
   }
-
   @override
   Widget build(BuildContext context) {
     final groups = _groupsForVisibility(widget.product.groups);
     final isSummary = step >= groups.length;
     final total = widget.product.priceForSelection(picked);
-
     void goPrev() {
       if (isSummary) {
         setState(() => step = groups.isEmpty ? 0 : groups.length - 1);
@@ -1494,7 +1415,6 @@ class _OrderWizardState extends State<OrderWizard> {
         Navigator.pop(context);
       }
     }
-
     Future<void> goNext() async {
       if (isSummary) {
         if (widget.editMode) {
@@ -1516,7 +1436,6 @@ class _OrderWizardState extends State<OrderWizard> {
       }
       setState(() => step++);
     }
-
     return Scaffold(
       appBar: AppBar(
         title: Text(isSummary ? 'Récapitulatif' : widget.product.name),
@@ -1578,20 +1497,17 @@ class _OrderWizardState extends State<OrderWizard> {
     );
   }
 }
-
 class _GroupStep extends StatelessWidget {
   final OptionGroup group;
   final Map<String, List<OptionItem>> picked;
   final void Function(OptionGroup, OptionItem) toggleSingle;
   final void Function(OptionGroup, OptionItem) toggleMulti;
-
   const _GroupStep({
     required this.group,
     required this.picked,
     required this.toggleSingle,
     required this.toggleMulti,
   });
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1610,7 +1526,6 @@ class _GroupStep extends StatelessWidget {
               final bottomSafe = MediaQuery.of(context).padding.bottom;
               final bottomBarH = kBottomNavigationBarHeight;
               final gridBottomPad = 12.0 + bottomSafe + bottomBarH;
-
               return GridView.builder(
                 padding: EdgeInsets.fromLTRB(12, 8, 12, gridBottomPad),
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -1624,7 +1539,6 @@ class _GroupStep extends StatelessWidget {
                   final it = group.items[i];
                   final selectedList = picked[group.id] ?? const <OptionItem>[];
                   final isSelected = selectedList.any((e) => e.id == it.id);
-
                   final color = Theme.of(context).colorScheme;
                   bool isAvecId(String id) => id == 'avec_crudites' || id == 'avec';
                   bool isSansId(String id) => id == 'sans_crudites';
@@ -1632,12 +1546,10 @@ class _GroupStep extends StatelessWidget {
                   final avecOn = isCrudGroup && selectedList.any((e) => isAvecId(e.id));
                   final sansOn = isCrudGroup && selectedList.any((e) => isSansId(e.id));
                   final atMax = group.multiple && selectedList.length >= group.maxSelect;
-
                   bool cruditesHardLock =
                       isCrudGroup && (avecOn || sansOn) && !((avecOn && isAvecId(it.id)) || (sansOn && isSansId(it.id)));
                   bool limitLock = group.multiple && atMax && !isSelected;
                   final disabled = cruditesHardLock || limitLock;
-
                   void onTap() {
                     if (group.multiple) {
                       toggleMulti(group, it);
@@ -1645,7 +1557,6 @@ class _GroupStep extends StatelessWidget {
                       toggleSingle(group, it);
                     }
                   }
-
                   return InkWell(
                     borderRadius: BorderRadius.circular(14),
                     onTap: disabled ? null : onTap,
@@ -1715,13 +1626,11 @@ class _GroupStep extends StatelessWidget {
     );
   }
 }
-
 class _Summary extends StatelessWidget {
   final Product product;
   final Map<String, List<OptionItem>> picked;
   final double total;
   const _Summary({required this.product, required this.picked, required this.total});
-
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -1750,7 +1659,6 @@ class _Summary extends StatelessWidget {
     );
   }
 }
-
 /* =======================
   PAGE 3 : PANIER
   ======================= */
@@ -1761,7 +1669,6 @@ class CartPage extends StatelessWidget {
     final app = AppScope.of(context);
     final lines = app.cart;
     final total = lines.fold(0.0, (s, l) => s + l.total);
-
     if (lines.isEmpty) {
       return Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: const [
@@ -1771,7 +1678,6 @@ class CartPage extends StatelessWidget {
         ]),
       );
     }
-
     return Column(
       children: [
         Padding(
@@ -1796,7 +1702,11 @@ class CartPage extends StatelessWidget {
               final l = lines[i];
               return ListTile(
                 leading: const Icon(Icons.fastfood),
-                title: Text('${l.product.name} • €${l.total.toStringAsFixed(2)}'),
+                title: Text(
+                  (l.qty > 1)
+                      ? '${l.product.name} x${l.qty} • €${l.total.toStringAsFixed(2)}'
+                      : '${l.product.name} • €${l.total.toStringAsFixed(2)}',
+                ),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1811,6 +1721,17 @@ class CartPage extends StatelessWidget {
                 trailing: Wrap(
                   spacing: 4,
                   children: [
+                    IconButton(
+                      tooltip: 'Diminuer',
+                      icon: const Icon(Icons.remove_circle_outline),
+                      onPressed: () => app.updateCartLineQty(i, l.qty - 1),
+                    ),
+                    Text('${l.qty}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    IconButton(
+                      tooltip: 'Augmenter',
+                      icon: const Icon(Icons.add_circle_outline),
+                      onPressed: () => app.updateCartLineQty(i, l.qty + 1),
+                    ),
                     IconButton(
                       tooltip: 'Modifier',
                       icon: const Icon(Icons.edit_outlined),
@@ -1858,15 +1779,12 @@ class CartPage extends StatelessWidget {
             onPressed: () async {
               final name = await _askCustomerName(context);
               if (name == null) return;
-
               // ŞİMDİ SAATİ SOR (alt sınır: şimdi + prepMinutes - tolerans)
               final readyAt = await _askReadyTime(context);
               if (readyAt == null) return;
-
               final app = AppScope.of(context);
               final order = app.finalizeCartToOrder(customer: name, readyAtOverride: readyAt);
               if (order == null) return;
-
               try {
                 // >>> GÜNCELLEME: AppState’teki IP/Port ile yazdır
                 await printOrderAndroidWith(order, app.printerIp, app.printerPort);
@@ -1887,7 +1805,6 @@ class CartPage extends StatelessWidget {
     );
   }
 }
-
 /* =======================
   PAGE 4 : COMMANDES + YAZDIRMA
   ======================= */
@@ -1897,7 +1814,10 @@ class OrdersPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final orders = app.orders.reversed.toList();
-
+    // >>> YENİ: Özet hesapları
+    final int totalOrders = orders.length;
+    final int totalItems = orders.fold(0, (s, o) => s + o.lines.length);
+    final double totalEuros = orders.fold(0.0, (s, o) => s + o.total);
     if (orders.isEmpty) {
       return Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: const [
@@ -1907,7 +1827,6 @@ class OrdersPage extends StatelessWidget {
         ]),
       );
     }
-
     return Column(
       children: [
         Padding(
@@ -1938,6 +1857,23 @@ class OrdersPage extends StatelessWidget {
             ),
           ]),
         ),
+        // >>> YENİ: Özet kartı (sipariş, article, toplam €)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _Stat(label: 'Commandes', value: '$totalOrders'),
+                  _Stat(label: 'Articles', value: '$totalItems'),
+                  _Stat(label: 'Total', value: '€${totalEuros.toStringAsFixed(2)}'),
+                ],
+              ),
+            ),
+          ),
+        ),
         const Divider(height: 1),
         Expanded(
           child: ListView.separated(
@@ -1949,7 +1885,7 @@ class OrdersPage extends StatelessWidget {
               final who = o.customer.isEmpty ? '' : ' — ${o.customer}';
               return ListTile(
                 leading: const Icon(Icons.receipt),
-                title: Text('Commande$who • ${o.lines.length} article(s) • €${o.total.toStringAsFixed(2)}'),
+                title: Text('Commande$who • ${o.lines.fold<int>(0, (s, l) => s + l.qty)} article(s) • €${o.total.toStringAsFixed(2)}'),
                 subtitle: Text('Prêt à ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}'),
                 trailing: IconButton(
                   icon: const Icon(Icons.print_outlined),
@@ -1957,9 +1893,9 @@ class OrdersPage extends StatelessWidget {
                     try {
                       final app = AppScope.of(context);
                       await printOrderAndroidWith(o, app.printerIp, app.printerPort);
-                      _snack(context, 'Envoyé à l’imprimante.');
+                      if (context.mounted) _snack(context, 'Envoyé à l’imprimante.');
                     } catch (e) {
-                      _snack(context, 'Échec de l’impression: $e');
+                      if (context.mounted) _snack(context, 'Échec de l’impression: $e');
                     }
                   },
                   tooltip: 'Imprimer',
@@ -1978,16 +1914,24 @@ class OrdersPage extends StatelessWidget {
                               if (o.customer.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 4),
-                                  child: Text('Client: ${o.customer}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  child: Text(
+                                    'Client: ${o.customer}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
                                 ),
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 8),
-                                child: Text('Prêt à: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                                child: Text(
+                                  'Prêt à: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
+                              // Her satır için ürün ve seçilenler
                               for (int idx = 0; idx < o.lines.length; idx++) ...[
-                                Text('Article ${idx + 1}: ${o.lines[idx].product.name}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text(
+                                  'Article ${idx + 1}: ${o.lines[idx].product.name}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
                                 for (final g in o.lines[idx].product.groups)
                                   if ((o.lines[idx].picked[g.id] ?? const <OptionItem>[]).isNotEmpty) ...[
                                     Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -2006,14 +1950,15 @@ class OrdersPage extends StatelessWidget {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold)),
-                                  Text('€${o.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  Text('€${o.total.toStringAsFixed(2)}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold)),
                                 ],
                               ),
                             ],
                           ),
                         ),
                         actions: [
-                          TextButton(
+                          TextButton.icon(
                             onPressed: () async {
                               try {
                                 final app = AppScope.of(context);
@@ -2026,9 +1971,13 @@ class OrdersPage extends StatelessWidget {
                                 _snack(context, 'Échec de l’impression: $e');
                               }
                             },
-                            child: const Text('Imprimer'),
+                            icon: const Icon(Icons.print_outlined),
+                            label: const Text('Imprimer'),
                           ),
-                          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fermer')),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Fermer'),
+                          ),
                         ],
                       );
                     },
@@ -2042,7 +1991,6 @@ class OrdersPage extends StatelessWidget {
     );
   }
 }
-
 /* =======================
   DİYALOGLAR & UTIL
   ======================= */
@@ -2065,12 +2013,11 @@ Future<bool> _askPin(BuildContext context) async {
       ],
     ),
   );
-  if (ok != true) {
+  if (ok != true && context.mounted) {
     _snack(context, 'Code incorrect.');
   }
   return ok == true;
 }
-
 Future<String?> _askCustomerName(BuildContext context) async {
   final ctrl = TextEditingController();
   String? error;
@@ -2120,21 +2067,16 @@ Future<String?> _askCustomerName(BuildContext context) async {
     },
   );
 }
-
 Future<DateTime?> _askReadyTime(BuildContext context) async {
   final app = AppScope.of(context);
   final now = DateTime.now();
-
   // Saniyeleri/ milisaniyeleri at: dakika hassasiyeti
   final anchor = DateTime(now.year, now.month, now.day, now.hour, now.minute);
-
   // Otomatik hazır saat (varsayılan) ve en erken izinli saat
   final minDT = anchor.add(Duration(minutes: app.prepMinutes));
   final earliestDT = minDT.subtract(const Duration(minutes: EARLY_TOLERANCE_MIN));
-
   // Ekranda görünen varsayılan saat: minDT (erken değil)
   TimeOfDay initial = TimeOfDay(hour: minDT.hour, minute: minDT.minute);
-
   while (true) {
     final picked = await showTimePicker(
       context: context,
@@ -2148,9 +2090,7 @@ Future<DateTime?> _askReadyTime(BuildContext context) async {
         );
       },
     );
-
     if (picked == null) return null; // iptal
-
     // Gece yarısı olasılığı için karşılaştırmayı minDT’nin tarihi üzerinde yap
     final pickedDT = DateTime(
       minDT.year,
@@ -2159,7 +2099,6 @@ Future<DateTime?> _askReadyTime(BuildContext context) async {
       picked.hour,
       picked.minute,
     );
-
     // En erken izinli saatten daha erkense reddet
     if (pickedDT.isBefore(earliestDT)) {
       if (context.mounted) {
@@ -2174,18 +2113,15 @@ Future<DateTime?> _askReadyTime(BuildContext context) async {
       initial = TimeOfDay(hour: earliestDT.hour, minute: earliestDT.minute);
       continue;
     }
-
     // Geçerli seçim
     return pickedDT;
   }
 }
-
 void _snack(BuildContext context, String msg, {int ms = 1200}) {
   if (!context.mounted) return;
   final bottomInset = MediaQuery.of(context).padding.bottom;
   final bottomBar = kBottomNavigationBarHeight;
   final bottomMargin = 12 + bottomInset + bottomBar;
-
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(
@@ -2199,11 +2135,9 @@ void _snack(BuildContext context, String msg, {int ms = 1200}) {
       ),
     );
 }
-
 void _showWarn(BuildContext context, String msg) {
   _snack(context, msg);
 }
-
 /* =======================
   Choisir butonu
   ======================= */
@@ -2223,14 +2157,12 @@ Widget choisirButton(VoidCallback onTap, BuildContext context) {
     ),
   );
 }
-
 // ==================================================
 // ESCP/RAW yazdırma yardımcıları
 // ==================================================
 String _two(int n) => n.toString().padLeft(2, '0');
 String _formatEuro(double v) => '€${v.toStringAsFixed(2)}';
 String _money(double v) => '${v.toStringAsFixed(2).replaceAll('.', ',')} €';
-
 String _rightLine(String left, String right, {int width = 32}) {
   left = left.replaceAll('\n', ' ');
   right = right.replaceAll('\n', ' ');
@@ -2240,6 +2172,28 @@ String _rightLine(String left, String right, {int width = 32}) {
   return left + ' ' * (width - left.length - right.length) + right;
 }
 
+String _shortLabel(CartLine l) {
+  String base = l.product.name;
+  String extra = '';
+  String firstLabelOf(String gid) {
+    final list = l.picked[gid];
+    if (list == null || list.isEmpty) return '';
+    return list.first.label;
+  }
+  if (base == 'Tacos') {
+    extra = firstLabelOf('type_tacos'); // "2 viandes" gibi
+  } else if (base == 'Burgers') {
+    final b = firstLabelOf('type_burger'); // "Le Majestueux" vb.
+    if (b.isNotEmpty) base = b;
+  } else if (base == 'Sandwich') {
+    extra = firstLabelOf('type_sand'); // "Kebab", "Berlineur"...
+  } else if (base == 'Menu Enfant') {
+    extra = firstLabelOf('choix_enfant');
+  }
+  final label = (extra.isNotEmpty) ? '$base ${extra.toLowerCase()}' : base;
+  return label;
+}
+
 void _cmd(Socket s, List<int> bytes) => s.add(bytes);
 void _boldOn(Socket s) => _cmd(s, [27, 69, 1]);
 void _boldOff(Socket s) => _cmd(s, [27, 69, 0]);
@@ -2247,7 +2201,6 @@ void _size(Socket s, int n) => _cmd(s, [29, 33, n]);
 void _alignLeft(Socket s) => _cmd(s, [27, 97, 0]);
 void _alignCenter(Socket s) => _cmd(s, [27, 97, 1]);
 void _alignRight(Socket s) => _cmd(s, [27, 97, 2]);
-
 void _strongLine(Socket s, String text) {
   _boldOn(s);
   _size(s, 1); // bir boy büyüt (sadece genişlik)
@@ -2255,7 +2208,6 @@ void _strongLine(Socket s, String text) {
   _size(s, 0); // normale dön
   _boldOff(s);
 }
-
 void _writeCp1252(Socket socket, String text) {
   final out = <int>[];
   for (final r in text.runes) {
@@ -2295,20 +2247,16 @@ void _writeCp1252(Socket socket, String text) {
   }
   socket.add(out);
 }
-
 Future<void> printOrderAndroidWith(SavedOrder o, String ip, int port) async {
   final socket = await Socket.connect(ip, port, timeout: const Duration(seconds: 5));
-
   _cmd(socket, [27, 64]); // init
   _cmd(socket, [27, 116, 16]); // CP1252
-
   _alignCenter(socket);
   _size(socket, 17);
   _boldOn(socket);
   _writeCp1252(socket, '*** BISCORNUE ***\n');
   _boldOff(socket);
   _size(socket, 0);
-
   if (o.customer.isNotEmpty) {
     _size(socket, 1);
     _boldOn(socket);
@@ -2316,20 +2264,18 @@ Future<void> printOrderAndroidWith(SavedOrder o, String ip, int port) async {
     _boldOff(socket);
     _size(socket, 0);
   }
-
   _boldOn(socket);
   _size(socket, 1);
-  _writeCp1252(socket, 'Pret a: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}\n');
+  _writeCp1252(socket, 'Prêt à: ${_two(o.readyAt.hour)}:${_two(o.readyAt.minute)}\n');
   _size(socket, 0);
   _boldOff(socket);
-
   _alignLeft(socket);
   _writeCp1252(socket, '--------------------------------\n');
-
   for (int i = 0; i < o.lines.length; i++) {
     final l = o.lines[i];
-    _strongLine(socket, _rightLine(l.product.name, _money(l.total)));
-
+    final base = _shortLabel(l);
+    final lineLabel = (l.qty > 1) ? '${l.qty}x $base' : base;
+    _strongLine(socket, _rightLine(lineLabel, _money(l.total)));
     for (final g in l.product.groups) {
       final sel = l.picked[g.id] ?? const <OptionItem>[];
       if (sel.isNotEmpty) {
@@ -2343,7 +2289,6 @@ Future<void> printOrderAndroidWith(SavedOrder o, String ip, int port) async {
       _writeCp1252(socket, '--------------------------------\n');
     }
   }
-
   _writeCp1252(socket, '--------------------------------\n');
   _alignRight(socket);
   _boldOn(socket);
@@ -2351,39 +2296,52 @@ Future<void> printOrderAndroidWith(SavedOrder o, String ip, int port) async {
   _writeCp1252(socket, _rightLine('TOTAL', '€${o.total.toStringAsFixed(2).replaceAll('.', ',')}') + '\n');
   _size(socket, 0);
   _boldOff(socket);
-
   _cmd(socket, [10, 10, 29, 86, 66, 0]); // feed & cut
   await socket.flush();
   await socket.close();
 }
-
 @Deprecated('AppState’ten IP/Port kullanın')
 Future<void> printOrderAndroid(SavedOrder o) async {
   // Varsayılan sabitleri kullanır (uygun değil ama geriye dönük rahatlık için)
   await printOrderAndroidWith(o, PRINTER_IP, PRINTER_PORT);
 }
-
 Future<void> printTestToPrinter(String ip, int port) async {
   final socket = await Socket.connect(ip, port, timeout: const Duration(seconds: 5));
-  _cmd(socket, [27, 64]);      // init
+  _cmd(socket, [27, 64]);       // init
   _cmd(socket, [27, 116, 16]); // CP1252
-
   _alignCenter(socket);
   _boldOn(socket);
   _size(socket, 1);
   _writeCp1252(socket, '*** TEST IMPRESSION ***\n');
   _boldOff(socket);
   _size(socket, 0);
-
   final now = DateTime.now();
   _writeCp1252(socket, 'BISCORNUE\n');
   _writeCp1252(socket, 'IP: $ip  Port: $port\n');
   _writeCp1252(socket, '${_two(now.day)}/${_two(now.month)}/${now.year} '
-                       '${_two(now.hour)}:${_two(now.minute)}\n');
+          '${_two(now.hour)}:${_two(now.minute)}\n');
   _writeCp1252(socket, '--------------------------------\n');
   _writeCp1252(socket, 'Si ceci est lisible, la connexion est OK.\n');
-
   _cmd(socket, [10, 10, 29, 86, 66, 0]); // feed & cut
   await socket.flush();
   await socket.close();
 }
+// Basit istatistik kutusu
+class _Stat extends StatelessWidget {
+  final String label;
+  final String value;
+  const _Stat({required this.label, required this.value});
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(color: color.onSurfaceVariant)),
+        const SizedBox(height: 2),
+        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+      ],
+    );
+  }
+}
+
